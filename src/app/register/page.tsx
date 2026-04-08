@@ -5,7 +5,7 @@ import RegistrationForm from './RegistrationForm'
 
 export const metadata = {
   title: 'Register | Next Level Soccer SF',
-  description: 'Register for Next Level Soccer Development Camps at Beach Chalet.',
+  description: 'Create your parent account and register for Next Level Soccer Development Camps at Beach Chalet.',
 }
 
 export default function RegisterPage() {
@@ -22,7 +22,8 @@ export default function RegisterPage() {
           Register for Camp
         </h1>
         <p className="text-slate-400 text-lg max-w-lg mx-auto">
-          Competitive middle school club players train Monday-Friday, 3:30-7:30 PM at Beach Chalet.
+          Step 1 includes signing in or creating your account. Competitive middle school club players train Monday–Friday,
+          3:30–7:30 PM at Beach Chalet.
         </p>
       </div>
 

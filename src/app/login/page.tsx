@@ -4,8 +4,8 @@ import Footer from '@/components/Footer'
 import LoginForm from './LoginForm'
 
 export const metadata = {
-  title: 'Log in | Next Level Soccer SF',
-  description: 'Sign in with email and password or a magic link.',
+  title: 'Returning parent sign-in | Next Level Soccer SF',
+  description: 'Sign in to your parent dashboard. New families register for camp on the registration page.',
 }
 
 function LoginFallback() {
@@ -21,9 +21,10 @@ export default function LoginPage() {
     <>
       <Navbar />
       <div className="bg-gradient-to-br from-[#041f36] to-[#062744] pt-28 pb-10 text-center px-4">
-        <h1 className="text-3xl sm:text-4xl font-extrabold text-white mb-2">Parent login</h1>
+        <h1 className="text-3xl sm:text-4xl font-extrabold text-white mb-2">Returning parents</h1>
         <p className="text-slate-400 text-sm max-w-md mx-auto">
-          Access your dashboard and speed up camp registration.
+          Sign in to manage your dashboard. Registering for camp for the first time this year? Use Register for camp — your
+          account is created there.
         </p>
       </div>
       <main className="bg-[#f7f2e8] min-h-screen py-12 px-4 flex justify-center">

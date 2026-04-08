@@ -26,14 +26,15 @@ export default async function DashboardPage() {
             <div className="bg-white border border-[#e8d8ce] rounded-2xl p-8 text-center">
               <h1 className="text-2xl font-extrabold text-[#062744] mb-3">Parent Dashboard</h1>
               <p className="text-slate-600 mb-6">
-                Sign in with Google, email, or a magic link to view your registrations.
+                Already registered before? Sign in to your parent account. New to camp this season? Start on registration
+                — that flow creates your account.
               </p>
               <div className="flex flex-col sm:flex-row gap-3 justify-center">
                 <Link
                   href="/login?next=%2Fdashboard"
                   className="inline-block bg-[#062744] text-white font-semibold px-6 py-3 rounded-full hover:bg-[#041f36] transition-colors"
                 >
-                  Log in
+                  Sign in
                 </Link>
                 <Link
                   href="/register"

@@ -4,6 +4,7 @@ import { useState, useTransition, useEffect, useCallback } from 'react'
 import type { User } from '@supabase/supabase-js'
 import { createClient } from '@/lib/supabase/client'
 import { submitFamilyRegistration, type RegistrationChildInput } from './actions'
+import ParentEmailAuthPanel from '@/components/ParentEmailAuthPanel'
 import { uploadChildPhoto } from '@/lib/supabase/storage-upload'
 import { CAMP_SESSIONS } from '@/lib/camp-weeks'
 import { formatUsPhoneAsYouType, isCompleteUsPhone } from '@/lib/phone-mask'
@@ -562,6 +563,10 @@ export default function RegistrationForm() {
           className="relative bg-white rounded-2xl border border-[#e8d8ce] p-6 sm:p-8 shadow-sm"
           onSubmit={(e) => {
             e.preventDefault()
+            if (!authUser) {
+              setError('Please sign in or create an account above before continuing (Google, email, or magic link).')
+              return
+            }
             if (!parent.parentPhone.trim()) {
               setError('Please enter your phone number.')
               return
@@ -578,14 +583,22 @@ export default function RegistrationForm() {
             setStep(2)
           }}
         >
-          <SectionHeader step={1} title="Parent Information" />
+          <SectionHeader step={1} title="Your account & parent information" />
 
           {authUser ? (
             <p className="text-sm text-slate-600 mb-4">
               Signed in as <strong>{parent.parentEmail}</strong>. Add your phone number if you have not already.
             </p>
           ) : (
-            <div className="mb-6">
+            <div className="mb-6 space-y-4">
+              <p className="text-sm text-slate-600 leading-relaxed">
+                Sign in or create an account as part of registration (required before you submit). Already registered in a
+                previous year? Use{' '}
+                <a href="/login?next=%2Fdashboard" className="text-[#f05a28] font-semibold hover:underline">
+                  returning parent sign-in
+                </a>{' '}
+                for your dashboard only — new camp sign-ups stay on this page.
+              </p>
               <button
                 type="button"
                 onClick={() => void signInWithGoogle()}
@@ -599,15 +612,16 @@ export default function RegistrationForm() {
                 </svg>
                 Continue with Google
               </button>
-              <p className="text-xs text-slate-500 mt-2 text-center">
-                Or{' '}
-                <a href="/login?next=%2Fregister" className="text-[#f05a28] font-semibold hover:underline">
-                  log in with email
-                </a>{' '}
-                and return here. You can also enter your details manually below.
+              <ParentEmailAuthPanel variant="register" />
+              <p className="text-xs text-slate-500">
+                After you sign in, your email is locked to this account. You can still edit other parent fields below.
               </p>
             </div>
           )}
+
+          <div className="border-t border-[#e8d8ce] pt-6 mt-2">
+            <p className="text-xs font-semibold text-[#213c57] uppercase tracking-wide mb-4">Parent / guardian details</p>
+          </div>
 
           {/* Honeypot: hidden from users; bots often fill this. */}
           <div className="absolute w-px h-px overflow-hidden opacity-0 pointer-events-none" aria-hidden="true">

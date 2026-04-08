@@ -77,8 +77,9 @@ export default function Navbar() {
                 <Link
                   href="/login"
                   className="text-[#264765] font-semibold hover:text-[#f05a28] transition-colors whitespace-nowrap"
+                  title="For parents who already have an account"
                 >
-                  Log In
+                  Sign in
                 </Link>
                 <Link
                   href="/register"
@@ -137,9 +138,10 @@ export default function Navbar() {
               <Link
                 href="/login"
                 className="block text-center py-2 text-[#264765] font-semibold hover:text-[#f05a28]"
+                title="For parents who already have an account"
                 onClick={() => setMenuOpen(false)}
               >
-                Log In
+                Sign in
               </Link>
               <Link
                 href="/register"
