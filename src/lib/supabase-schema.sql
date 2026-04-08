@@ -20,8 +20,18 @@ create table if not exists registrations (
   medical_notes     text,
   emergency_contact_name  text not null,
   emergency_contact_phone text not null,
-  status            text default 'pending'
+  status            text default 'pending',
+
+  user_id uuid references auth.users (id) on delete set null,
+  refund_requested_weeks text[] not null default '{}'
 );
+
+-- Optional legacy columns (aligned with registration_children / playing level incl. Silver as free text)
+alter table public.registrations add column if not exists user_id uuid references auth.users (id) on delete set null;
+alter table public.registrations add column if not exists refund_requested_weeks text[] default '{}';
+alter table public.registrations add column if not exists primary_position text;
+alter table public.registrations add column if not exists secondary_position text;
+alter table public.registrations add column if not exists playing_level text;
 
 alter table registrations enable row level security;
 alter table registrations add column if not exists child_photo_url text;
@@ -73,6 +83,8 @@ create table if not exists registration_children (
   player_gender     text not null,
   player_experience_level text not null,
   player_experience_other text,
+  primary_position  text not null,
+  secondary_position text not null,
   grade_fall        text not null,
   school_fall       text not null,
   child_photo_url   text,
@@ -82,7 +94,9 @@ create table if not exists registration_children (
 
   medical_notes text,
   emergency_contact_name  text not null,
-  emergency_contact_phone text not null
+  emergency_contact_phone text not null,
+
+  refund_requested_weeks text[] not null default '{}'
 );
 
 -- Migration for existing databases that already have registration_children with legacy columns:
@@ -94,6 +108,9 @@ alter table registration_children add column if not exists player_experience_oth
 alter table registration_children add column if not exists grade_fall text;
 alter table registration_children add column if not exists school_fall text;
 alter table registration_children add column if not exists child_photo_url text;
+alter table registration_children add column if not exists primary_position text;
+alter table registration_children add column if not exists secondary_position text;
+alter table registration_children add column if not exists refund_requested_weeks text[] default '{}';
 
 do $$
 begin

@@ -2,6 +2,7 @@ import Link from 'next/link'
 import Navbar from '@/components/Navbar'
 import Footer from '@/components/Footer'
 import { createClient } from '@/lib/supabase/server'
+import { isRefundWindowOpenPacific } from '@/lib/refund-deadline'
 import { getDashboardCamps } from './actions'
 import DashboardClient from './DashboardClient'
 
@@ -50,11 +51,12 @@ export default async function DashboardPage() {
   }
 
   const { camps } = await getDashboardCamps()
+  const refundWindowOpen = isRefundWindowOpenPacific()
 
   return (
     <>
       <Navbar />
-      <DashboardClient initialCamps={camps} />
+      <DashboardClient initialCamps={camps} refundWindowOpen={refundWindowOpen} />
       <Footer />
     </>
   )

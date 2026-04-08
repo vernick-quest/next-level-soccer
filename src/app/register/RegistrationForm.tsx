@@ -6,6 +6,7 @@ import { createClient } from '@/lib/supabase/client'
 import { submitFamilyRegistration, type RegistrationChildInput } from './actions'
 import { uploadChildPhoto } from '@/lib/supabase/storage-upload'
 import { CAMP_SESSIONS } from '@/lib/camp-weeks'
+import { formatUsPhoneAsYouType, isCompleteUsPhone } from '@/lib/phone-mask'
 
 const PRONOUNS_OPTIONS = [
   { value: 'He/Him', label: 'He/Him' },
@@ -23,6 +24,7 @@ const EXPERIENCE_LEVELS = [
   'School Team',
   'Copper',
   'Bronze',
+  'Silver',
   'Gold',
   'Premier',
   'NPL',
@@ -30,6 +32,20 @@ const EXPERIENCE_LEVELS = [
   'ECNL',
   'MLS-Next',
   'other',
+] as const
+
+const SOCCER_POSITIONS = [
+  'GK',
+  'LB',
+  'CB',
+  'RB',
+  'CDM',
+  'CM',
+  'CAM',
+  'LW',
+  'RW',
+  'ST',
+  'CF',
 ] as const
 
 const GRADE_OPTIONS: { value: string; label: string }[] = [
@@ -89,6 +105,8 @@ function emptyChild(): ChildFormState {
     playerGender: '',
     playerExperienceLevel: '',
     playerExperienceOther: '',
+    primaryPosition: '',
+    secondaryPosition: '',
     gradeFall: '',
     schoolFall: '',
     childPhotoUrl: '',
@@ -229,7 +247,7 @@ export default function RegistrationForm() {
       parentFirstName: data.parent_first_name || prev.parentFirstName,
       parentLastName: data.parent_last_name || prev.parentLastName,
       parentEmail: data.parent_email || prev.parentEmail,
-      parentPhone: data.parent_phone || prev.parentPhone,
+      parentPhone: data.parent_phone ? formatUsPhoneAsYouType(data.parent_phone) : prev.parentPhone,
     }))
   }, [])
 
@@ -302,6 +320,10 @@ export default function RegistrationForm() {
 
   function handleParentChange(e: React.ChangeEvent<HTMLInputElement>) {
     const { name, value } = e.target
+    if (name === 'parentPhone' || name === 'secondParentPhone') {
+      setParent((prev) => ({ ...prev, [name]: formatUsPhoneAsYouType(value) }))
+      return
+    }
     setParent((prev) => ({ ...prev, [name]: value }))
   }
 
@@ -311,6 +333,10 @@ export default function RegistrationForm() {
 
   function handleChildInput(id: string, e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) {
     const { name, value } = e.target
+    if (name === 'emergencyContactPhone') {
+      updateChild(id, { emergencyContactPhone: formatUsPhoneAsYouType(value) })
+      return
+    }
     updateChild(id, { [name]: value } as Partial<ChildFormState>)
   }
 
@@ -357,6 +383,8 @@ export default function RegistrationForm() {
         playerGender: last.playerGender,
         playerExperienceLevel: last.playerExperienceLevel,
         playerExperienceOther: last.playerExperienceOther,
+        primaryPosition: last.primaryPosition,
+        secondaryPosition: last.secondaryPosition,
         gradeFall: last.gradeFall,
         schoolFall: last.schoolFall,
         childPhotoUrl: last.childPhotoUrl,
@@ -388,12 +416,17 @@ export default function RegistrationForm() {
       if (c.playerExperienceLevel === 'other' && !c.playerExperienceOther.trim()) {
         return `Please describe playing level for player ${i + 1} (Other).`
       }
+      if (!c.primaryPosition) return `Please select primary position for player ${i + 1}.`
+      if (!c.secondaryPosition) return `Please select secondary position for player ${i + 1}.`
       if (!c.gradeFall) return `Please select grade for player ${i + 1}.`
       if (!c.schoolFall.trim()) return `Please enter school for player ${i + 1}.`
       if (!c.campWeeks.length) return `Select at least one week for ${c.playerFirstName || `player ${i + 1}`}.`
       if (!c.shirtSize) return `Select shirt size for player ${i + 1}.`
       if (!c.emergencyContactName.trim() || !c.emergencyContactPhone.trim()) {
         return `Please add emergency contact for player ${i + 1}.`
+      }
+      if (!isCompleteUsPhone(c.emergencyContactPhone)) {
+        return `Please enter a complete 10-digit emergency contact phone for player ${i + 1}.`
       }
     }
     return null
@@ -455,6 +488,8 @@ export default function RegistrationForm() {
       playerGender: c.playerGender as 'boy' | 'girl',
       playerExperienceLevel: c.playerExperienceLevel,
       playerExperienceOther: c.playerExperienceOther,
+      primaryPosition: c.primaryPosition,
+      secondaryPosition: c.secondaryPosition,
       gradeFall: c.gradeFall,
       schoolFall: c.schoolFall,
       childPhotoUrl: c.childPhotoUrl,
@@ -529,6 +564,14 @@ export default function RegistrationForm() {
             e.preventDefault()
             if (!parent.parentPhone.trim()) {
               setError('Please enter your phone number.')
+              return
+            }
+            if (!isCompleteUsPhone(parent.parentPhone)) {
+              setError('Please enter a complete 10-digit parent phone number.')
+              return
+            }
+            if (parent.secondParentPhone.trim() && !isCompleteUsPhone(parent.secondParentPhone)) {
+              setError('Second parent phone must be a complete 10-digit number, or leave it blank.')
               return
             }
             setError(null)
@@ -665,19 +708,6 @@ export default function RegistrationForm() {
                   <Label required>Last Name</Label>
                   <Input name="playerLastName" placeholder="Smith" value={child.playerLastName} onChange={(e) => handleChildInput(child.id, e)} required />
                 </div>
-                <div className="sm:col-span-2">
-                  <Label required>Pronouns</Label>
-                  <Select name="playerPronouns" value={child.playerPronouns} onChange={(e) => handleChildInput(child.id, e)} required>
-                    <option value="">Select pronouns</option>
-                    {PRONOUNS_OPTIONS.map((p) => (
-                      <option key={p.value} value={p.value}>{p.label}</option>
-                    ))}
-                  </Select>
-                </div>
-                <div>
-                  <Label required>Date of Birth</Label>
-                  <Input name="playerDob" type="date" value={child.playerDob} onChange={(e) => handleChildInput(child.id, e)} required />
-                </div>
                 <div>
                   <Label required>Gender</Label>
                   <Select name="playerGender" value={child.playerGender} onChange={(e) => handleChildInput(child.id, e)} required>
@@ -686,6 +716,19 @@ export default function RegistrationForm() {
                       <option key={g.value} value={g.value}>{g.label}</option>
                     ))}
                   </Select>
+                </div>
+                <div>
+                  <Label required>Pronouns</Label>
+                  <Select name="playerPronouns" value={child.playerPronouns} onChange={(e) => handleChildInput(child.id, e)} required>
+                    <option value="">Select pronouns</option>
+                    {PRONOUNS_OPTIONS.map((p) => (
+                      <option key={p.value} value={p.value}>{p.label}</option>
+                    ))}
+                  </Select>
+                </div>
+                <div className="sm:col-span-2">
+                  <Label required>Date of Birth</Label>
+                  <Input name="playerDob" type="date" value={child.playerDob} onChange={(e) => handleChildInput(child.id, e)} required />
                 </div>
                 <div className="sm:col-span-2">
                   <Label required>Playing level</Label>
@@ -717,6 +760,34 @@ export default function RegistrationForm() {
                   </div>
                 )}
                 <div>
+                  <Label required>Primary position</Label>
+                  <Select
+                    name="primaryPosition"
+                    value={child.primaryPosition}
+                    onChange={(e) => handleChildInput(child.id, e)}
+                    required
+                  >
+                    <option value="">Select position</option>
+                    {SOCCER_POSITIONS.map((pos) => (
+                      <option key={pos} value={pos}>{pos}</option>
+                    ))}
+                  </Select>
+                </div>
+                <div>
+                  <Label required>Secondary position</Label>
+                  <Select
+                    name="secondaryPosition"
+                    value={child.secondaryPosition}
+                    onChange={(e) => handleChildInput(child.id, e)}
+                    required
+                  >
+                    <option value="">Select position</option>
+                    {SOCCER_POSITIONS.map((pos) => (
+                      <option key={pos} value={pos}>{pos}</option>
+                    ))}
+                  </Select>
+                </div>
+                <div>
                   <Label required>Grade attending (fall)</Label>
                   <Select name="gradeFall" value={child.gradeFall} onChange={(e) => handleChildInput(child.id, e)} required>
                     <option value="">Select grade</option>
@@ -725,7 +796,7 @@ export default function RegistrationForm() {
                     ))}
                   </Select>
                 </div>
-                <div className="sm:col-span-2">
+                <div>
                   <Label required>School attending (fall)</Label>
                   <Input name="schoolFall" placeholder="School name" value={child.schoolFall} onChange={(e) => handleChildInput(child.id, e)} required />
                 </div>
@@ -776,7 +847,7 @@ export default function RegistrationForm() {
                     ))}
                   </div>
                 </div>
-                <div>
+                <div className="sm:col-span-2">
                   <Label required>T-Shirt Size</Label>
                   <Select name="shirtSize" value={child.shirtSize} onChange={(e) => handleChildInput(child.id, e)} required>
                     <option value="">Select size</option>
@@ -861,6 +932,13 @@ export default function RegistrationForm() {
                           {item.playerExperienceLevel === 'other'
                             ? `Other: ${item.playerExperienceOther}`
                             : item.playerExperienceLevel}
+                        </>
+                      )}
+                      {(item.primaryPosition || item.secondaryPosition) && (
+                        <>
+                          {' '}
+                          · Positions: {item.primaryPosition}
+                          {item.secondaryPosition ? ` / ${item.secondaryPosition}` : ''}
                         </>
                       )}
                     </div>

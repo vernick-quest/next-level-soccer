@@ -21,16 +21,15 @@ const coaches = [
     name: 'Coach Rami Hammadi',
     title: 'Head Coach',
     bio: "A former professional player with Fiorentina (Italy), Rami Hammadi bridges European tactical rigor with San Francisco's youth talent. After successful tenures at the collegiate and high school levels, Rami pivoted to youth development to have a more profound impact on the player lifecycle. Having coached every tier from Bronze to MLS Next, he specializes in refining competitive players through a high-performance environment designed to build the technical precision and grit required for the next level.",
-    initials: 'RH',
   },
 ]
 
-const stats = [
-  { value: '+100%', label: 'Juggling record vs. your day-one baseline' },
-  { value: '~20%', label: '50m sprint — explosive speed block' },
-  { value: 'Sharper', label: 'Shot accuracy & finishing on frame' },
-  { value: 'Tighter', label: 'Ball control — first touch under pressure' },
-]
+const developmentPillars = [
+  { label: 'Technical', subtitle: 'The Ball Master' },
+  { label: 'Tactical', subtitle: 'The Soccer IQ' },
+  { label: 'Physical', subtitle: 'The Athlete' },
+  { label: 'Psychological', subtitle: 'The Competitor' },
+] as const
 
 export default function HomePage() {
   return (
@@ -59,24 +58,24 @@ export default function HomePage() {
               priority
             />
           </div>
-          <span className="inline-block bg-[#f05a28]/15 text-[#ffd7c8] border border-[#f05a28]/40 text-sm font-semibold px-4 py-1.5 rounded-full mb-6 tracking-wide uppercase">
-            San Francisco Youth Soccer Camp
+          <span className="inline-block bg-[#f05a28]/15 text-[#ffd7c8] border border-[#f05a28]/40 text-xs sm:text-sm font-semibold px-3 sm:px-4 py-1.5 rounded-full mb-6 tracking-wide uppercase max-w-[95vw]">
+            San Francisco Youth Soccer Training
           </span>
-          <h1 className="text-5xl sm:text-6xl lg:text-7xl font-extrabold text-white leading-tight mb-6">
+          <h1 className="text-4xl sm:text-6xl lg:text-7xl font-extrabold text-white leading-tight mb-6">
             Reach Your{' '}
             <span className="text-transparent bg-clip-text bg-gradient-to-r from-[#f05a28] to-[#ff8c61]">
               Next Level
             </span>
           </h1>
-          <p className="text-xl text-slate-300 max-w-3xl mx-auto mb-10 leading-relaxed">
+          <p className="text-lg sm:text-xl text-slate-300 max-w-3xl mx-auto mb-10 leading-relaxed px-1">
             Next Level Soccer Development Camps at Beach Chalet for competitive middle school club players. Monday through Friday, 3:30-7:30 PM.
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
             <Link
               href="/register"
-              className="bg-[#f05a28] hover:bg-[#d94e21] text-white font-bold px-8 py-4 rounded-full text-lg transition-all shadow-lg shadow-[#3a1a0f]/40 hover:-translate-y-0.5"
+              className="bg-[#f05a28] hover:bg-[#d94e21] text-white font-bold px-6 sm:px-8 py-3.5 sm:py-4 rounded-full text-base sm:text-lg transition-all shadow-lg shadow-[#3a1a0f]/40 hover:-translate-y-0.5 text-center leading-snug max-w-[min(100%,22rem)] sm:max-w-none"
             >
-              Register for Summer 2026
+              Register for Summer Camps 2026
             </Link>
             <a
               href="#sessions"
@@ -87,23 +86,48 @@ export default function HomePage() {
           </div>
         </div>
 
-        <div className="absolute bottom-8 left-1/2 -translate-x-1/2 text-slate-500 animate-bounce text-2xl">↓</div>
+        <a
+          href="#player-development"
+          className="absolute bottom-5 sm:bottom-7 left-1/2 -translate-x-1/2 text-white hero-arrow-pulse rounded-full focus:outline-none focus-visible:ring-2 focus-visible:ring-white/50 focus-visible:ring-offset-2 focus-visible:ring-offset-[#041f36]"
+          aria-label="Scroll to player development and report cards"
+        >
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            xmlns="http://www.w3.org/2000/svg"
+            className="w-16 h-16 sm:w-[4.5rem] sm:h-[4.5rem] drop-shadow-[0_2px_10px_rgba(0,0,0,0.4)]"
+            aria-hidden
+          >
+            <path
+              d="M6 9l6 6 6-6"
+              stroke="currentColor"
+              strokeWidth="2.75"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
+        </a>
       </section>
 
-      {/* Outcomes bar */}
-      <section className="bg-[#f05a28] py-10">
+      {/* Player development — report cards & pillars */}
+      <section id="player-development" className="bg-[#f05a28] py-10 sm:py-12 lg:py-14 scroll-mt-20">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
-          <p className="text-center text-orange-50 text-sm font-medium max-w-2xl mx-auto mb-8 leading-relaxed">
-            We track progress from each player&apos;s baseline. Here&apos;s what serious athletes work toward over a week of camp.
+          <p className="text-center text-white font-bold text-base sm:text-lg lg:text-xl max-w-3xl mx-auto mb-8 sm:mb-10 leading-relaxed px-1">
+            Every week of camp comes with a report card to track the performance improvements vital to the development
+            of the individual player. These can be viewed on the website to track long-term progress.
           </p>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-8 md:gap-6 text-center text-white">
-            {stats.map((s) => (
-              <div key={s.label}>
-                <div className="text-3xl sm:text-4xl font-extrabold leading-tight">{s.value}</div>
-                <div className="text-orange-100 text-xs sm:text-sm mt-2 leading-snug px-1">{s.label}</div>
-              </div>
+          <ul className="grid sm:grid-cols-2 gap-4 sm:gap-5 max-w-4xl mx-auto list-none p-0 m-0">
+            {developmentPillars.map((pillar) => (
+              <li key={pillar.label}>
+                <div className="rounded-2xl bg-white px-5 py-4 shadow-md border border-white/90 text-center sm:text-left h-full">
+                  <p className="text-sm sm:text-base leading-relaxed m-0">
+                    <strong className="font-extrabold text-[#f05a28]">{pillar.label}</strong>
+                    <span className="text-[#062744] font-medium"> ({pillar.subtitle})</span>
+                  </p>
+                </div>
+              </li>
             ))}
-          </div>
+          </ul>
         </div>
       </section>
 
@@ -197,23 +221,37 @@ export default function HomePage() {
       {/* Coaches */}
       <section id="coaches" className="py-24 bg-[#fffaf5]">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="text-center mb-16">
+          <div className="text-center mb-12 sm:mb-16">
             <span className="text-[#f05a28] font-semibold text-sm uppercase tracking-widest">Our Coaches</span>
             <h2 className="text-4xl font-extrabold text-slate-900 mt-2">Led by Coach Rami Hammadi</h2>
           </div>
 
-          <div className="grid md:grid-cols-3 gap-8">
-            {coaches.map((c) => (
-              <div key={c.name} className="bg-white rounded-2xl p-8 shadow-sm border border-[#f0e2d9] text-center md:col-start-2">
-                <div className="w-20 h-20 rounded-full bg-gradient-to-br from-[#f05a28] to-[#d14a1f] flex items-center justify-center text-white text-2xl font-bold mx-auto mb-5">
-                  {c.initials}
+          {coaches.map((c) => (
+            <div
+              key={c.name}
+              className="bg-white rounded-2xl p-6 sm:p-10 shadow-sm border border-[#f0e2d9] max-w-5xl mx-auto"
+            >
+              <div className="grid md:grid-cols-12 gap-8 lg:gap-10 items-start">
+                <div className="md:col-span-5 lg:col-span-4">
+                  <div className="relative w-full max-w-sm mx-auto md:mx-0 aspect-[3/4] max-h-[min(520px,70vh)] rounded-2xl overflow-hidden border border-[#e8d8ce] shadow-md bg-slate-100">
+                    <Image
+                      src="/coach-rami.png"
+                      alt="Coach Rami Hammadi on the field"
+                      fill
+                      className="object-cover object-[center_18%]"
+                      sizes="(max-width: 768px) 100vw, 320px"
+                      priority
+                    />
+                  </div>
                 </div>
-                <div className="text-xl font-bold text-slate-900 mb-1">{c.name}</div>
-                <div className="text-[#f05a28] text-sm font-semibold mb-4">{c.title}</div>
-                <p className="text-slate-500 leading-relaxed text-sm">{c.bio}</p>
+                <div className="md:col-span-7 lg:col-span-8 text-left">
+                  <h3 className="text-2xl font-bold text-slate-900 mb-1">{c.name}</h3>
+                  <p className="text-[#f05a28] font-semibold mb-4">{c.title}</p>
+                  <p className="text-slate-600 leading-relaxed text-sm sm:text-base">{c.bio}</p>
+                </div>
               </div>
-            ))}
-          </div>
+            </div>
+          ))}
         </div>
       </section>
 

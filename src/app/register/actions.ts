@@ -10,6 +10,8 @@ export type RegistrationChildInput = {
   playerGender: 'boy' | 'girl'
   playerExperienceLevel: string
   playerExperienceOther: string
+  primaryPosition: string
+  secondaryPosition: string
   gradeFall: string
   schoolFall: string
   childPhotoUrl: string
@@ -55,6 +57,9 @@ export async function submitFamilyRegistration(data: FamilyRegistrationInput): P
     }
     if (child.playerExperienceLevel === 'other' && !child.playerExperienceOther.trim()) {
       return { success: false, error: 'Please describe the experience level when you select Other.' }
+    }
+    if (!child.primaryPosition.trim() || !child.secondaryPosition.trim()) {
+      return { success: false, error: 'Each player must have primary and secondary positions selected.' }
     }
   }
 
@@ -120,6 +125,8 @@ export async function submitFamilyRegistration(data: FamilyRegistrationInput): P
     player_experience_level: child.playerExperienceLevel,
     player_experience_other:
       child.playerExperienceLevel === 'other' ? child.playerExperienceOther.trim() || null : null,
+    primary_position: child.primaryPosition.trim(),
+    secondary_position: child.secondaryPosition.trim(),
     grade_fall: child.gradeFall,
     school_fall: child.schoolFall.trim(),
     child_photo_url: child.childPhotoUrl.trim() || null,
