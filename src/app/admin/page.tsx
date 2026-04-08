@@ -1,8 +1,7 @@
 import { redirect } from 'next/navigation'
 import Navbar from '@/components/Navbar'
 import Footer from '@/components/Footer'
-import { createClient } from '@/lib/supabase/server'
-import { isAdminEmail } from '@/lib/admin'
+import { getStaffAdminUser, isOwnerEmail } from '@/lib/admin'
 import { listAdminRows } from './actions'
 import AdminTable from './AdminTable'
 
@@ -12,14 +11,11 @@ export const metadata = {
 }
 
 export default async function AdminPage() {
-  const supabase = await createClient()
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-
-  if (!user?.email || !isAdminEmail(user.email)) {
-    redirect('/login?next=%2Fadmin')
+  const staffUser = await getStaffAdminUser()
+  if (!staffUser?.email) {
+    redirect('/admin/login?next=%2Fadmin')
   }
+  const showStaffLink = isOwnerEmail(staffUser.email)
 
   const result = await listAdminRows()
   if (result.error === 'fetch') {
@@ -46,7 +42,7 @@ export default async function AdminPage() {
             All camp weeks across every family submission. Sort by column headers. Mark a family as paid to confirm their
             registration, then send the welcome email. Edit report cards opens the same evaluation form as Coach&apos;s View.
           </p>
-          <AdminTable initialRows={result.rows} />
+          <AdminTable initialRows={result.rows} showStaffLink={showStaffLink} />
         </div>
       </main>
       <Footer />

@@ -3,6 +3,7 @@
 import { Resend } from 'resend'
 import { createClient } from '@/lib/supabase/server'
 import { createServiceRoleClient } from '@/lib/supabase/service'
+import { getOwnerEmail } from '@/lib/admin'
 import { isRefundWindowOpenPacific } from '@/lib/refund-deadline'
 
 /** One row in `public.registrations` (camp week + player). */
@@ -191,7 +192,11 @@ export async function requestRefundForCamp(input: {
   }
 
   const apiKey = process.env.RESEND_API_KEY
-  const notifyTo = process.env.ADMIN_EMAIL ?? process.env.RESEND_REFUND_TO
+  const notifyTo =
+    process.env.RESEND_REFUND_TO ??
+    process.env.OWNER_EMAIL ??
+    process.env.ADMIN_EMAIL ??
+    getOwnerEmail()
   const from = process.env.RESEND_FROM_EMAIL ?? 'Next Level Soccer <onboarding@resend.dev>'
 
   if (apiKey && notifyTo) {
@@ -217,7 +222,9 @@ export async function requestRefundForCamp(input: {
       console.error('requestRefundForCamp email:', sendErr)
     }
   } else {
-    console.warn('requestRefundForCamp: missing RESEND_API_KEY or ADMIN_EMAIL/RESEND_REFUND_TO; refund saved but email not sent.')
+    console.warn(
+      'requestRefundForCamp: missing RESEND_API_KEY or RESEND_REFUND_TO/OWNER_EMAIL; refund saved but email not sent.',
+    )
   }
 
   return { success: true }

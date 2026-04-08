@@ -1,6 +1,8 @@
 import { createClient } from '@/lib/supabase/server'
+import { getStaffAdminUser } from '@/lib/admin'
 import { listPlayersForCoach } from './actions'
 import CoachesSignIn from './CoachesSignIn'
+import CoachesWrongAccount from './CoachesWrongAccount'
 import CoachReportForm from './CoachReportForm'
 
 export const metadata = {
@@ -9,12 +11,15 @@ export const metadata = {
 }
 
 export default async function CoachesPage() {
-  const supabase = await createClient()
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-
-  if (!user) {
+  const staffUser = await getStaffAdminUser()
+  if (!staffUser?.email) {
+    const supabase = await createClient()
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
+    if (user) {
+      return <CoachesWrongAccount />
+    }
     return <CoachesSignIn />
   }
 

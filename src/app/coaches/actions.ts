@@ -1,5 +1,6 @@
 'use server'
 
+import { getStaffAdminUser } from '@/lib/admin'
 import { createClient } from '@/lib/supabase/server'
 import { ALL_REPORT_METRIC_KEYS, type ReportMetricKey } from '@/lib/player-report-metrics'
 
@@ -20,14 +21,12 @@ export async function listPlayersForCoach(): Promise<{
   players: CoachPlayerRow[]
   error: 'auth' | 'fetch' | null
 }> {
-  const supabase = await createClient()
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-  if (!user) {
+  const staffUser = await getStaffAdminUser()
+  if (!staffUser) {
     return { players: [], error: 'auth' }
   }
 
+  const supabase = await createClient()
   const { data, error } = await supabase
     .from('registration_children')
     .select(
@@ -82,13 +81,13 @@ export async function savePlayerReport(payload: {
   coachComments: string
   dateGenerated: string
 }): Promise<SaveReportResult> {
-  const supabase = await createClient()
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-  if (!user) {
-    return { success: false, error: 'You must be signed in to save a report.' }
+  const staffUser = await getStaffAdminUser()
+  if (!staffUser) {
+    return { success: false, error: 'You must be signed in as staff to save a report.' }
   }
+
+  const supabase = await createClient()
+  const user = staffUser
 
   if (!payload.registrationChildId) {
     return { success: false, error: 'Select a player.' }

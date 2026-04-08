@@ -2,19 +2,20 @@ import Link from 'next/link'
 import Image from 'next/image'
 import Navbar from '@/components/Navbar'
 import Footer from '@/components/Footer'
+import { CAMP_SESSIONS } from '@/lib/camp-weeks'
+import { getWeekSpotUsage, WEEK_PLAYER_CAPACITY } from '@/lib/home-camp-spots'
 
-const sessions = [
-  { name: 'Week of Jun 8', dates: 'Mon-Fri, 3:30-7:30 PM', spots: 10, price: '$350' },
-  { name: 'Week of Jun 15', dates: 'Mon-Fri, 3:30-7:30 PM', spots: 10, price: '$350' },
-  { name: 'Week of Jun 22', dates: 'Mon-Fri, 3:30-7:30 PM', spots: 10, price: '$350' },
-  { name: 'Week of Jun 29', dates: 'Mon-Fri, 3:30-7:30 PM', spots: 10, price: '$350' },
-  { name: 'Week of Jul 6', dates: 'Mon-Fri, 3:30-7:30 PM', spots: 10, price: '$350' },
-  { name: 'Week of Jul 13', dates: 'Mon-Fri, 3:30-7:30 PM', spots: 10, price: '$350' },
-  { name: 'Week of Jul 20', dates: 'Mon-Fri, 3:30-7:30 PM', spots: 10, price: '$350' },
-  { name: 'Week of Jul 27', dates: 'Mon-Fri, 3:30-7:30 PM', spots: 10, price: '$350' },
-  { name: 'Week of Aug 3', dates: 'Mon-Fri, 3:30-7:30 PM', spots: 10, price: '$350' },
-  { name: 'Week of Aug 10', dates: 'Mon-Fri, 3:30-7:30 PM', spots: 10, price: '$350' },
-]
+/** Refresh schedule spot counts periodically (uses service-role read). */
+export const revalidate = 60
+
+const sessions = CAMP_SESSIONS.map((weekKey) => ({
+  weekKey,
+  name: weekKey.replace(/\s*\(\$350\)\s*$/, ''),
+  dates: 'Mon-Fri, 3:30-7:30 PM',
+  price: '$350',
+}))
+
+const MIN_WEEK_PLAYERS = 10
 
 const coaches = [
   {
@@ -31,7 +32,38 @@ const developmentPillars = [
   { label: 'Psychological', subtitle: 'The Competitor' },
 ] as const
 
-export default function HomePage() {
+function HeroChevrons() {
+  const chev = (opacity: string, size: string, strokeWidth: string) => (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      className={`${size} drop-shadow-[0_2px_10px_rgba(0,0,0,0.4)]`}
+      aria-hidden
+    >
+      <path
+        d="M6 9l6 6 6-6"
+        stroke="currentColor"
+        strokeWidth={strokeWidth}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        className={opacity}
+      />
+    </svg>
+  )
+
+  return (
+    <div className="flex flex-col items-center justify-end -space-y-2 sm:-space-y-2.5">
+      {chev('opacity-30', 'w-10 h-10 sm:w-11 sm:h-11', '2')}
+      {chev('opacity-55', 'w-12 h-12 sm:w-14 sm:h-14', '2.5')}
+      {chev('opacity-100', 'w-[3.25rem] h-[3.25rem] sm:w-[4.25rem] sm:h-[4.25rem]', '3.25')}
+    </div>
+  )
+}
+
+export default async function HomePage() {
+  const spotUsage = await getWeekSpotUsage()
+
   return (
     <>
       <Navbar />
@@ -88,24 +120,10 @@ export default function HomePage() {
 
         <a
           href="#player-development"
-          className="absolute bottom-5 sm:bottom-7 left-1/2 -translate-x-1/2 text-white hero-arrow-pulse rounded-full focus:outline-none focus-visible:ring-2 focus-visible:ring-white/50 focus-visible:ring-offset-2 focus-visible:ring-offset-[#041f36]"
+          className="absolute bottom-5 sm:bottom-7 left-1/2 -translate-x-1/2 text-white hero-arrow-pulse rounded-full focus:outline-none focus-visible:ring-2 focus-visible:ring-white/50 focus-visible:ring-offset-2 focus-visible:ring-offset-[#041f36] pb-1"
           aria-label="Scroll to player development and report cards"
         >
-          <svg
-            viewBox="0 0 24 24"
-            fill="none"
-            xmlns="http://www.w3.org/2000/svg"
-            className="w-16 h-16 sm:w-[4.5rem] sm:h-[4.5rem] drop-shadow-[0_2px_10px_rgba(0,0,0,0.4)]"
-            aria-hidden
-          >
-            <path
-              d="M6 9l6 6 6-6"
-              stroke="currentColor"
-              strokeWidth="2.75"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-          </svg>
+          <HeroChevrons />
         </a>
       </section>
 
@@ -120,9 +138,9 @@ export default function HomePage() {
             {developmentPillars.map((pillar) => (
               <li key={pillar.label}>
                 <div className="rounded-2xl bg-white px-5 py-4 shadow-md border border-white/90 text-center sm:text-left h-full">
-                  <p className="text-sm sm:text-base leading-relaxed m-0">
-                    <strong className="font-extrabold text-[#f05a28]">{pillar.label}</strong>
-                    <span className="text-[#062744] font-medium"> ({pillar.subtitle})</span>
+                  <p className="text-sm sm:text-base leading-relaxed m-0 font-bold">
+                    <span className="text-[#f05a28]">{pillar.label}</span>
+                    <span className="text-[#062744]"> ({pillar.subtitle})</span>
                   </p>
                 </div>
               </li>
@@ -146,18 +164,18 @@ export default function HomePage() {
               </p>
               <div className="flex flex-col sm:flex-row gap-6">
                 <div className="flex items-start gap-3">
-                  <span className="text-[#f05a28] text-xl mt-0.5">✓</span>
-                  <div>
-                    <div className="font-semibold text-slate-900">Advanced Technical Work</div>
-                    <div className="text-slate-500 text-sm">Ball control with both feet under pressure</div>
-                  </div>
+                  <span className="text-[#f05a28] text-xl mt-0.5 shrink-0">✓</span>
+                  <p className="text-sm sm:text-base leading-relaxed m-0 font-bold">
+                    <span className="text-[#f05a28]">Advanced Technical Work</span>
+                    <span className="text-[#062744]"> (Ball control with both feet under pressure)</span>
+                  </p>
                 </div>
                 <div className="flex items-start gap-3">
-                  <span className="text-[#f05a28] text-xl mt-0.5">✓</span>
-                  <div>
-                    <div className="font-semibold text-slate-900">Physical Development</div>
-                    <div className="text-slate-500 text-sm">Match endurance, explosive speed, and agility</div>
-                  </div>
+                  <span className="text-[#f05a28] text-xl mt-0.5 shrink-0">✓</span>
+                  <p className="text-sm sm:text-base leading-relaxed m-0 font-bold">
+                    <span className="text-[#f05a28]">Physical Development</span>
+                    <span className="text-[#062744]"> (Match endurance, explosive speed, and agility)</span>
+                  </p>
                 </div>
               </div>
             </div>
@@ -169,7 +187,7 @@ export default function HomePage() {
                 <div className="text-slate-600 mb-6">Beach Chalet · Mon-Fri · 3:30-7:30 PM</div>
                 <Link
                   href="/register"
-                  className="inline-block bg-[#062744] text-white font-bold px-6 py-3 rounded-full hover:bg-[#041f36] transition-colors"
+                  className="inline-block bg-[#f05a28] text-white font-bold px-6 py-3 rounded-full hover:bg-[#d94e21] transition-colors shadow-md"
                 >
                   Secure Your Spot
                 </Link>
@@ -190,30 +208,65 @@ export default function HomePage() {
             <h2 className="text-4xl font-extrabold text-slate-900 mt-2">Summer 2026 Weekly Schedule</h2>
             <p className="text-slate-500 mt-3">Monday-Friday, 3:30-7:30 PM at Beach Chalet</p>
             <p className="text-slate-500 text-sm mt-2">$350 per week for all camp weeks, including 4th of July week.</p>
-            <p className="text-[#c24a22] text-sm mt-2 font-medium">Each week requires a minimum of 10 registered players to run. If a week does not reach 10, that week may be canceled.</p>
+            <p className="text-slate-600 text-sm mt-2">
+              Each week is capped at <strong className="text-[#062744]">{WEEK_PLAYER_CAPACITY} players</strong>. Counts include
+              pending and paid registrations.
+            </p>
+            <p className="text-[#c24a22] text-sm mt-2 font-medium">
+              Each week requires a minimum of {MIN_WEEK_PLAYERS} registered players to run. If a week does not reach{' '}
+              {MIN_WEEK_PLAYERS}, that week may be canceled.
+            </p>
+            {!spotUsage && (
+              <p className="text-slate-400 text-xs mt-2 max-w-xl mx-auto">
+                Live spot counts need <code className="text-[#213c57]">SUPABASE_SERVICE_ROLE_KEY</code> on the server; until
+                then, assume up to {WEEK_PLAYER_CAPACITY} spots per week.
+              </p>
+            )}
           </div>
 
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
-            {sessions.map((s) => (
+            {sessions.map((s) => {
+              const usage = spotUsage?.[s.weekKey]
+              const remaining = usage?.remaining ?? WEEK_PLAYER_CAPACITY
+              const soldOut = remaining <= 0
+              return (
               <div
-                key={s.name}
+                key={s.weekKey}
                 className="border border-[#e8d8ce] rounded-2xl p-6 text-center hover:border-[#f05a28] hover:shadow-md transition-all group bg-white"
               >
                 <div className="text-[#f05a28] font-bold text-sm uppercase tracking-wide mb-2">{s.name}</div>
                 <div className="text-slate-800 font-semibold mb-4">{s.dates}</div>
                 <div className="text-3xl font-extrabold text-slate-900 mb-1">{s.price}</div>
-                <div className="text-slate-400 text-xs mb-5">per player</div>
-                <div className="text-[#c24a22] text-xs font-semibold mb-4">
-                  {`Minimum ${s.spots} players required`}
-                </div>
-                <Link
-                  href="/register"
-                  className="block w-full bg-[#062744] text-white font-semibold py-2.5 rounded-full hover:bg-[#041f36] transition-colors text-sm"
+                <div className="text-slate-400 text-xs mb-4">per player</div>
+                <div
+                  className={`text-sm font-bold mb-1 ${soldOut ? 'text-[#c24a22]' : 'text-[#062744]'}`}
                 >
-                  Register
-                </Link>
+                  {soldOut
+                    ? 'Sold out'
+                    : `${remaining} spot${remaining === 1 ? '' : 's'} remaining`}
+                </div>
+                <div className="text-slate-500 text-xs mb-4">of {WEEK_PLAYER_CAPACITY} per week</div>
+                <div className="text-[#c24a22] text-xs font-semibold mb-4">
+                  Minimum {MIN_WEEK_PLAYERS} players required for week to run
+                </div>
+                {soldOut ? (
+                  <a
+                    href="mailto:nextlevelsoccersf@gmail.com?subject=Waitlist%20%E2%80%94%20Summer%20camp%20week"
+                    className="block w-full bg-[#062744] text-white font-semibold py-2.5 rounded-full hover:bg-[#041f36] transition-colors text-sm text-center"
+                  >
+                    Email to join waitlist
+                  </a>
+                ) : (
+                  <Link
+                    href="/register"
+                    className="block w-full bg-[#062744] text-white font-semibold py-2.5 rounded-full hover:bg-[#041f36] transition-colors text-sm"
+                  >
+                    Register
+                  </Link>
+                )}
               </div>
-            ))}
+              )
+            })}
           </div>
         </div>
       </section>

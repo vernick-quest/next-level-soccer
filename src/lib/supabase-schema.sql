@@ -355,3 +355,28 @@ end $$;
 
 -- Optional: coaches/admins using the browser Supabase client (not service role) need separate policies
 -- for INSERT/UPDATE/SELECT-all; the service role bypasses RLS for server-only tools.
+
+-- Delegated staff admins (Google sign-in). Owner email is configured in app env (OWNER_EMAIL); owner manages this list in /admin/staff.
+create table if not exists staff_admin_emails (
+  email text primary key,
+  created_at timestamptz not null default now(),
+  created_by_email text
+);
+
+alter table staff_admin_emails enable row level security;
+
+do $$
+begin
+  if not exists (
+    select 1 from pg_policies
+    where schemaname = 'public' and tablename = 'staff_admin_emails' and policyname = 'Staff can read own admin row'
+  ) then
+    create policy "Staff can read own admin row"
+      on staff_admin_emails
+      for select
+      to authenticated
+      using (
+        lower(trim(email)) = lower(trim(coalesce(auth.jwt() ->> 'email', '')))
+      );
+  end if;
+end $$;

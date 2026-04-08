@@ -61,7 +61,13 @@ function SortButton({
   )
 }
 
-export default function AdminTable({ initialRows }: { initialRows: AdminRow[] }) {
+export default function AdminTable({
+  initialRows,
+  showStaffLink,
+}: {
+  initialRows: AdminRow[]
+  showStaffLink?: boolean
+}) {
   const router = useRouter()
   const [sortKey, setSortKey] = useState<SortKey>('week')
   const [asc, setAsc] = useState(true)
@@ -112,6 +118,16 @@ export default function AdminTable({ initialRows }: { initialRows: AdminRow[] })
 
   return (
     <div className="space-y-4">
+      {showStaffLink && (
+        <div className="flex justify-end">
+          <Link
+            href="/admin/staff"
+            className="text-sm font-semibold text-[#f05a28] hover:text-[#d94e21] hover:underline"
+          >
+            Manage staff admins
+          </Link>
+        </div>
+      )}
       {message && (
         <div className="rounded-xl px-4 py-3 text-sm bg-amber-50 border border-amber-200 text-amber-900">{message}</div>
       )}

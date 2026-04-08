@@ -1,7 +1,7 @@
 'use server'
 
 import { Resend } from 'resend'
-import { isAdminEmail } from '@/lib/admin'
+import { getStaffAdminUser } from '@/lib/admin'
 import { campWeekSortIndex } from '@/lib/camp-weeks'
 import { createClient } from '@/lib/supabase/server'
 import { createServiceRoleClient } from '@/lib/supabase/service'
@@ -22,21 +22,14 @@ export type AdminRow = {
   createdAt: string
 }
 
-async function requireAdminUser() {
-  const supabase = await createClient()
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-  if (!user?.email || !isAdminEmail(user.email)) {
-    return null
-  }
-  return user
+async function requireStaffAdminUser() {
+  return getStaffAdminUser()
 }
 
 export async function listAdminRows(): Promise<
   { rows: AdminRow[]; error: null } | { rows: []; error: 'auth' | 'fetch' }
 > {
-  const user = await requireAdminUser()
+  const user = await requireStaffAdminUser()
   if (!user) {
     return { rows: [], error: 'auth' }
   }
@@ -106,7 +99,7 @@ export async function listAdminRows(): Promise<
 export type ActionOk = { success: true } | { success: false; error: string }
 
 export async function markSubmissionConfirmed(submissionId: string): Promise<ActionOk> {
-  const user = await requireAdminUser()
+  const user = await requireStaffAdminUser()
   if (!user) {
     return { success: false, error: 'Not authorized.' }
   }
@@ -143,7 +136,7 @@ export async function markSubmissionConfirmed(submissionId: string): Promise<Act
 }
 
 export async function sendWelcomeEmail(submissionId: string): Promise<ActionOk> {
-  const user = await requireAdminUser()
+  const user = await requireStaffAdminUser()
   if (!user) {
     return { success: false, error: 'Not authorized.' }
   }

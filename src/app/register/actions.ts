@@ -1,5 +1,6 @@
 'use server'
 
+import { validateCampWeekCapacityForSubmission } from '@/lib/home-camp-spots'
 import { createClient } from '@/lib/supabase/server'
 
 export type RegistrationChildInput = {
@@ -69,6 +70,11 @@ export async function submitFamilyRegistration(data: FamilyRegistrationInput): P
   } = await supabase.auth.getUser()
   if (!user) {
     return { success: false, error: 'Please sign in before submitting registration.' }
+  }
+
+  const capacity = await validateCampWeekCapacityForSubmission(data.children)
+  if (!capacity.ok) {
+    return { success: false, error: capacity.error }
   }
 
   const second =

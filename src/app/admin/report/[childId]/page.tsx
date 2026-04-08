@@ -1,6 +1,5 @@
 import { notFound, redirect } from 'next/navigation'
-import { createClient } from '@/lib/supabase/server'
-import { isAdminEmail } from '@/lib/admin'
+import { getStaffAdminUser } from '@/lib/admin'
 import { listPlayersForCoach } from '@/app/coaches/actions'
 import CoachReportForm from '@/app/coaches/CoachReportForm'
 
@@ -12,13 +11,9 @@ export const metadata = {
 export default async function AdminReportPage({ params }: { params: Promise<{ childId: string }> }) {
   const { childId } = await params
 
-  const supabase = await createClient()
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-
-  if (!user?.email || !isAdminEmail(user.email)) {
-    redirect(`/login?next=${encodeURIComponent(`/admin/report/${childId}`)}`)
+  const staffUser = await getStaffAdminUser()
+  if (!staffUser?.email) {
+    redirect(`/admin/login?next=${encodeURIComponent(`/admin/report/${childId}`)}`)
   }
 
   const { players, error } = await listPlayersForCoach()
