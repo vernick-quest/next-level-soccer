@@ -1,11 +1,33 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import Image from 'next/image'
+import type { User } from '@supabase/supabase-js'
+import { createClient } from '@/lib/supabase/client'
 
 export default function Navbar() {
   const [menuOpen, setMenuOpen] = useState(false)
+  const [user, setUser] = useState<User | null>(null)
+
+  useEffect(() => {
+    const supabase = createClient()
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setUser(session?.user ?? null)
+    })
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUser(session?.user ?? null)
+    })
+    return () => subscription.unsubscribe()
+  }, [])
+
+  async function signOut() {
+    const supabase = createClient()
+    await supabase.auth.signOut()
+    window.location.href = '/'
+  }
 
   return (
     <nav className="fixed top-0 left-0 right-0 z-50 bg-[#f7f2e8]/95 backdrop-blur border-b border-[#e8d8ce] shadow-sm">
@@ -28,12 +50,44 @@ export default function Navbar() {
             <a href="#about" className="hover:text-[#f05a28] transition-colors">About</a>
             <a href="#sessions" className="hover:text-[#f05a28] transition-colors">Schedule</a>
             <a href="#coaches" className="hover:text-[#f05a28] transition-colors">Staff</a>
-            <Link
-              href="/register"
-              className="bg-[#f05a28] text-white px-5 py-2 rounded-full hover:bg-[#d94e21] transition-colors font-semibold"
-            >
-              Register Now
-            </Link>
+            {user ? (
+              <>
+                <Link href="/dashboard" className="hover:text-[#f05a28] transition-colors">Dashboard</Link>
+                <div className="flex items-center gap-3">
+                  {user.user_metadata?.avatar_url ? (
+                    <img
+                      src={String(user.user_metadata.avatar_url)}
+                      alt="Profile"
+                      className="w-8 h-8 rounded-full object-cover border border-[#e8d8ce]"
+                    />
+                  ) : (
+                    <div className="w-8 h-8 rounded-full bg-slate-100 border border-[#e8d8ce]" />
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => void signOut()}
+                    className="bg-[#062744] text-white px-4 py-2 rounded-full hover:bg-[#041f36] transition-colors font-semibold"
+                  >
+                    Sign Out
+                  </button>
+                </div>
+              </>
+            ) : (
+              <div className="flex items-center gap-3">
+                <Link
+                  href="/login"
+                  className="text-[#264765] font-semibold hover:text-[#f05a28] transition-colors"
+                >
+                  Log in
+                </Link>
+                <Link
+                  href="/register"
+                  className="bg-[#f05a28] text-white px-5 py-2 rounded-full hover:bg-[#d94e21] transition-colors font-semibold"
+                >
+                  Register Now
+                </Link>
+              </div>
+            )}
           </div>
 
           {/* Mobile hamburger */}
@@ -55,13 +109,41 @@ export default function Navbar() {
           <a href="#about" className="block py-2 hover:text-[#f05a28]" onClick={() => setMenuOpen(false)}>About</a>
           <a href="#sessions" className="block py-2 hover:text-[#f05a28]" onClick={() => setMenuOpen(false)}>Schedule</a>
           <a href="#coaches" className="block py-2 hover:text-[#f05a28]" onClick={() => setMenuOpen(false)}>Staff</a>
-          <Link
-            href="/register"
-            className="block bg-[#f05a28] text-white text-center py-2 rounded-full hover:bg-[#d94e21] transition-colors font-semibold"
-            onClick={() => setMenuOpen(false)}
-          >
-            Register Now
-          </Link>
+          {user ? (
+            <>
+              <Link
+                href="/dashboard"
+                className="block bg-[#062744] text-white text-center py-2 rounded-full hover:bg-[#041f36] transition-colors font-semibold"
+                onClick={() => setMenuOpen(false)}
+              >
+                Dashboard
+              </Link>
+              <button
+                type="button"
+                onClick={() => void signOut()}
+                className="w-full bg-[#f05a28] text-white text-center py-2 rounded-full hover:bg-[#d94e21] transition-colors font-semibold"
+              >
+                Sign Out
+              </button>
+            </>
+          ) : (
+            <div className="flex flex-col gap-2">
+              <Link
+                href="/login"
+                className="block text-center py-2 text-[#264765] font-semibold hover:text-[#f05a28]"
+                onClick={() => setMenuOpen(false)}
+              >
+                Log in
+              </Link>
+              <Link
+                href="/register"
+                className="block bg-[#f05a28] text-white text-center py-2 rounded-full hover:bg-[#d94e21] transition-colors font-semibold"
+                onClick={() => setMenuOpen(false)}
+              >
+                Register Now
+              </Link>
+            </div>
+          )}
         </div>
       )}
     </nav>

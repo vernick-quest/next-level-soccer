@@ -16,6 +16,7 @@ create table if not exists registrations (
   player_experience text not null,
   camp_session      text not null,
   shirt_size        text not null,
+  child_photo_url   text,
   medical_notes     text,
   emergency_contact_name  text not null,
   emergency_contact_phone text not null,
@@ -23,6 +24,7 @@ create table if not exists registrations (
 );
 
 alter table registrations enable row level security;
+alter table registrations add column if not exists child_photo_url text;
 
 do $$
 begin
@@ -73,6 +75,7 @@ create table if not exists registration_children (
   player_experience_other text,
   grade_fall        text not null,
   school_fall       text not null,
+  child_photo_url   text,
 
   camp_weeks text[] not null,
   shirt_size text not null,
@@ -90,6 +93,7 @@ alter table registration_children add column if not exists player_experience_lev
 alter table registration_children add column if not exists player_experience_other text;
 alter table registration_children add column if not exists grade_fall text;
 alter table registration_children add column if not exists school_fall text;
+alter table registration_children add column if not exists child_photo_url text;
 
 do $$
 begin
@@ -127,6 +131,28 @@ begin
       using (auth.role() = 'authenticated');
   end if;
   if not exists (
+    select 1 from pg_policies where schemaname = 'public' and tablename = 'registration_submissions' and policyname = 'Parents can view own submissions'
+  ) then
+    create policy "Parents can view own submissions"
+      on registration_submissions for select
+      using (auth.uid() = auth_user_id);
+  end if;
+  if not exists (
+    select 1 from pg_policies where schemaname = 'public' and tablename = 'registration_submissions' and policyname = 'Parents can update pending own submissions'
+  ) then
+    create policy "Parents can update pending own submissions"
+      on registration_submissions for update
+      using (auth.uid() = auth_user_id and status = 'pending')
+      with check (auth.uid() = auth_user_id and status = 'pending');
+  end if;
+  if not exists (
+    select 1 from pg_policies where schemaname = 'public' and tablename = 'registration_submissions' and policyname = 'Parents can delete pending own submissions'
+  ) then
+    create policy "Parents can delete pending own submissions"
+      on registration_submissions for delete
+      using (auth.uid() = auth_user_id and status = 'pending');
+  end if;
+  if not exists (
     select 1 from pg_policies where schemaname = 'public' and tablename = 'registration_children' and policyname = 'Public can insert registration children'
   ) then
     create policy "Public can insert registration children"
@@ -139,6 +165,55 @@ begin
     create policy "Admins can view registration children"
       on registration_children for select
       using (auth.role() = 'authenticated');
+  end if;
+  if not exists (
+    select 1 from pg_policies where schemaname = 'public' and tablename = 'registration_children' and policyname = 'Parents can view own children'
+  ) then
+    create policy "Parents can view own children"
+      on registration_children for select
+      using (
+        exists (
+          select 1 from registration_submissions s
+          where s.id = registration_children.submission_id
+            and s.auth_user_id = auth.uid()
+        )
+      );
+  end if;
+  if not exists (
+    select 1 from pg_policies where schemaname = 'public' and tablename = 'registration_children' and policyname = 'Parents can update pending own children'
+  ) then
+    create policy "Parents can update pending own children"
+      on registration_children for update
+      using (
+        exists (
+          select 1 from registration_submissions s
+          where s.id = registration_children.submission_id
+            and s.auth_user_id = auth.uid()
+            and s.status = 'pending'
+        )
+      )
+      with check (
+        exists (
+          select 1 from registration_submissions s
+          where s.id = registration_children.submission_id
+            and s.auth_user_id = auth.uid()
+            and s.status = 'pending'
+        )
+      );
+  end if;
+  if not exists (
+    select 1 from pg_policies where schemaname = 'public' and tablename = 'registration_children' and policyname = 'Parents can delete pending own children'
+  ) then
+    create policy "Parents can delete pending own children"
+      on registration_children for delete
+      using (
+        exists (
+          select 1 from registration_submissions s
+          where s.id = registration_children.submission_id
+            and s.auth_user_id = auth.uid()
+            and s.status = 'pending'
+        )
+      );
   end if;
 end $$;
 
@@ -191,3 +266,75 @@ begin
       with check (auth.role() = 'authenticated');
   end if;
 end $$;
+
+-- ---------------------------------------------------------------------------
+-- Legacy registrations: parent auth link (needed for player_report_cards RLS)
+-- ---------------------------------------------------------------------------
+alter table public.registrations
+  add column if not exists user_id uuid references auth.users (id) on delete set null;
+
+create index if not exists registrations_user_id_idx on public.registrations (user_id);
+
+-- ---------------------------------------------------------------------------
+-- Player report cards (12 metrics × 1–5): 3 Technical, 3 Tactical, 3 Physical, 3 Psychological
+-- Links: registration_id → registrations.id, user_id → auth.users (parent; mirror registrations.user_id)
+-- ---------------------------------------------------------------------------
+create table if not exists public.player_report_cards (
+  id uuid primary key default gen_random_uuid(),
+  created_at timestamptz not null default now(),
+
+  registration_id uuid not null references public.registrations (id) on delete cascade,
+  user_id uuid references auth.users (id) on delete set null,
+
+  technical_1 int not null check (technical_1 between 1 and 5),
+  technical_2 int not null check (technical_2 between 1 and 5),
+  technical_3 int not null check (technical_3 between 1 and 5),
+
+  tactical_1 int not null check (tactical_1 between 1 and 5),
+  tactical_2 int not null check (tactical_2 between 1 and 5),
+  tactical_3 int not null check (tactical_3 between 1 and 5),
+
+  physical_1 int not null check (physical_1 between 1 and 5),
+  physical_2 int not null check (physical_2 between 1 and 5),
+  physical_3 int not null check (physical_3 between 1 and 5),
+
+  psychological_1 int not null check (psychological_1 between 1 and 5),
+  psychological_2 int not null check (psychological_2 between 1 and 5),
+  psychological_3 int not null check (psychological_3 between 1 and 5),
+
+  coach_comments text,
+  date_generated timestamptz not null default now(),
+  created_by uuid references auth.users (id) on delete set null
+);
+
+create index if not exists player_report_cards_registration_id_idx on public.player_report_cards (registration_id);
+create index if not exists player_report_cards_user_id_idx on public.player_report_cards (user_id);
+
+alter table public.player_report_cards enable row level security;
+
+-- Parents: SELECT only their own kids’ report cards (match parent user on card or on registrations row)
+do $$
+begin
+  if not exists (
+    select 1 from pg_policies
+    where schemaname = 'public' and tablename = 'player_report_cards' and policyname = 'Parents read own player report cards'
+  ) then
+    create policy "Parents read own player report cards"
+      on public.player_report_cards
+      for select
+      to authenticated
+      using (
+        auth.uid() = user_id
+        or exists (
+          select 1
+          from public.registrations r
+          where r.id = player_report_cards.registration_id
+            and r.user_id is not null
+            and r.user_id = auth.uid()
+        )
+      );
+  end if;
+end $$;
+
+-- Optional: coaches/admins using the browser Supabase client (not service role) need separate policies
+-- for INSERT/UPDATE/SELECT-all; the service role bypasses RLS for server-only tools.

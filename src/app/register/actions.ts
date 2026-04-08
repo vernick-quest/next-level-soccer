@@ -12,6 +12,7 @@ export type RegistrationChildInput = {
   playerExperienceOther: string
   gradeFall: string
   schoolFall: string
+  childPhotoUrl: string
   campWeeks: string[]
   shirtSize: string
   medicalNotes: string
@@ -29,6 +30,8 @@ export type FamilyRegistrationInput = {
   secondParentEmail: string
   secondParentPhone: string
   children: RegistrationChildInput[]
+  /** Honeypot — must be empty (see registration form). */
+  hpCompany?: string
 }
 
 export type ActionResult =
@@ -38,6 +41,10 @@ export type ActionResult =
 const CAMP_PRICE_CENTS = 35_000
 
 export async function submitFamilyRegistration(data: FamilyRegistrationInput): Promise<ActionResult> {
+  if (data.hpCompany?.trim()) {
+    return { success: false, error: 'Registration could not be completed. Please try again.' }
+  }
+
   if (!data.children.length) {
     return { success: false, error: 'Please add at least one child.' }
   }
@@ -55,6 +62,9 @@ export async function submitFamilyRegistration(data: FamilyRegistrationInput): P
   const {
     data: { user },
   } = await supabase.auth.getUser()
+  if (!user) {
+    return { success: false, error: 'Please sign in before submitting registration.' }
+  }
 
   const second =
     data.secondParentFirstName ||
@@ -78,7 +88,7 @@ export async function submitFamilyRegistration(data: FamilyRegistrationInput): P
   const totalAmountCents = totalWeeks * CAMP_PRICE_CENTS
 
   const parentRow = {
-    auth_user_id: user?.id ?? null,
+    auth_user_id: user.id,
     parent_first_name: data.parentFirstName,
     parent_last_name: data.parentLastName,
     parent_email: data.parentEmail,
@@ -112,6 +122,7 @@ export async function submitFamilyRegistration(data: FamilyRegistrationInput): P
       child.playerExperienceLevel === 'other' ? child.playerExperienceOther.trim() || null : null,
     grade_fall: child.gradeFall,
     school_fall: child.schoolFall.trim(),
+    child_photo_url: child.childPhotoUrl.trim() || null,
     camp_weeks: child.campWeeks,
     shirt_size: child.shirtSize,
     medical_notes: child.medicalNotes.trim() || null,

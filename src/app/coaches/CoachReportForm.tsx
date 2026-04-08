@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useTransition, useMemo } from 'react'
+import { useState, useTransition, useMemo, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import {
   REPORT_METRIC_GROUPS,
@@ -20,8 +20,22 @@ function formatPlayerLabel(p: CoachPlayerRow) {
   return `${name}${parentBit}`
 }
 
-export default function CoachReportForm({ players }: { players: CoachPlayerRow[] }) {
-  const [childId, setChildId] = useState('')
+export default function CoachReportForm({
+  players,
+  initialChildId,
+  pageTitle = "Coach's View",
+  backHref = '/',
+  signOutRedirect = '/coaches',
+}: {
+  players: CoachPlayerRow[]
+  initialChildId?: string
+  pageTitle?: string
+  backHref?: string
+  signOutRedirect?: string
+}) {
+  const [childId, setChildId] = useState(() =>
+    initialChildId && players.some((p) => p.id === initialChildId) ? initialChildId : '',
+  )
   const [scores, setScores] = useState(defaultScores)
   const [coachComments, setCoachComments] = useState('')
   const [dateLocal, setDateLocal] = useState(() => {
@@ -32,6 +46,12 @@ export default function CoachReportForm({ players }: { players: CoachPlayerRow[]
   const [message, setMessage] = useState<{ type: 'ok' | 'err'; text: string } | null>(null)
   const [isPending, startTransition] = useTransition()
 
+  useEffect(() => {
+    if (initialChildId && players.some((p) => p.id === initialChildId)) {
+      setChildId(initialChildId)
+    }
+  }, [initialChildId, players])
+
   const selectedPlayer = useMemo(() => players.find((p) => p.id === childId), [players, childId])
 
   function setScore(key: ReportMetricKey, value: number) {
@@ -41,7 +61,7 @@ export default function CoachReportForm({ players }: { players: CoachPlayerRow[]
   async function signOut() {
     const supabase = createClient()
     await supabase.auth.signOut()
-    window.location.href = '/coaches'
+    window.location.href = signOutRedirect
   }
 
   function handleSubmit(e: React.FormEvent) {
@@ -74,12 +94,12 @@ export default function CoachReportForm({ players }: { players: CoachPlayerRow[]
       <div className="max-w-3xl mx-auto">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-8">
           <div>
-            <h1 className="text-3xl font-extrabold text-[#062744]">Coach&apos;s View</h1>
+            <h1 className="text-3xl font-extrabold text-[#062744]">{pageTitle}</h1>
             <p className="text-slate-600 text-sm mt-1">Select a player, score 1–5 on each metric, add comments, then save.</p>
           </div>
           <div className="flex gap-2">
-            <a href="/" className="text-sm font-semibold text-[#f05a28] hover:text-[#d94e21] py-2">
-              Home
+            <a href={backHref} className="text-sm font-semibold text-[#f05a28] hover:text-[#d94e21] py-2">
+              Back
             </a>
             <button
               type="button"
@@ -116,12 +136,25 @@ export default function CoachReportForm({ players }: { players: CoachPlayerRow[]
               </label>
 
               {selectedPlayer && (
-                <p className="text-xs text-slate-500">
-                  Grade (fall): {selectedPlayer.grade_fall}
-                  {selectedPlayer.registration_submissions?.parent_email
-                    ? ` · Parent email: ${selectedPlayer.registration_submissions.parent_email}`
-                    : null}
-                </p>
+                <div className="flex items-center gap-3">
+                  {selectedPlayer.child_photo_url ? (
+                    <img
+                      src={selectedPlayer.child_photo_url}
+                      alt={`${selectedPlayer.player_first_name} ${selectedPlayer.player_last_name}`}
+                      className="w-12 h-12 rounded-full object-cover border border-[#e8d8ce]"
+                    />
+                  ) : (
+                    <div className="w-12 h-12 rounded-full bg-slate-100 border border-[#e8d8ce] flex items-center justify-center text-xs text-slate-500">
+                      No photo
+                    </div>
+                  )}
+                  <p className="text-xs text-slate-500">
+                    Grade (fall): {selectedPlayer.grade_fall}
+                    {selectedPlayer.registration_submissions?.parent_email
+                      ? ` · Parent email: ${selectedPlayer.registration_submissions.parent_email}`
+                      : null}
+                  </p>
+                </div>
               )}
 
               <label className="block">

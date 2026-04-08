@@ -4,6 +4,8 @@ import { useState, useTransition, useEffect, useCallback } from 'react'
 import type { User } from '@supabase/supabase-js'
 import { createClient } from '@/lib/supabase/client'
 import { submitFamilyRegistration, type RegistrationChildInput } from './actions'
+import { uploadChildPhoto } from '@/lib/supabase/storage-upload'
+import { CAMP_SESSIONS } from '@/lib/camp-weeks'
 
 const PRONOUNS_OPTIONS = [
   { value: 'He/Him', label: 'He/Him' },
@@ -39,18 +41,6 @@ const GRADE_OPTIONS: { value: string; label: string }[] = [
     return { value: String(n), label: `${n}${suffix} grade` }
   }),
 ]
-const CAMP_SESSIONS = [
-  'Week of Jun 8 ($350)',
-  'Week of Jun 15 ($350)',
-  'Week of Jun 22 ($350)',
-  'Week of Jun 29 ($350)',
-  'Week of Jul 6 ($350)',
-  'Week of Jul 13 ($350)',
-  'Week of Jul 20 ($350)',
-  'Week of Jul 27 ($350)',
-  'Week of Aug 3 ($350)',
-  'Week of Aug 10 ($350)',
-]
 const SHIRT_SIZES = ['YS', 'YM', 'YL', 'AS', 'AM', 'AL', 'AXL']
 
 const CAMP_PRICE = 350
@@ -69,6 +59,7 @@ type ParentInfoState = {
 type ChildFormState = Omit<RegistrationChildInput, 'playerGender'> & {
   id: string
   playerGender: '' | 'boy' | 'girl'
+  childPhotoFile: File | null
 }
 
 type Step = 1 | 2 | 3
@@ -100,11 +91,13 @@ function emptyChild(): ChildFormState {
     playerExperienceOther: '',
     gradeFall: '',
     schoolFall: '',
+    childPhotoUrl: '',
     campWeeks: [],
     shirtSize: '',
     medicalNotes: '',
     emergencyContactName: '',
     emergencyContactPhone: '',
+    childPhotoFile: null,
   }
 }
 
@@ -213,16 +206,42 @@ export default function RegistrationForm() {
   const [authUser, setAuthUser] = useState<User | null>(null)
   const [authReady, setAuthReady] = useState(false)
   const [termsAccepted, setTermsAccepted] = useState(false)
+  const [isUploadingPhotos, setIsUploadingPhotos] = useState(false)
   const [isPending, startTransition] = useTransition()
   const [submitted, setSubmitted] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  /** Honeypot — must stay empty; bots often fill hidden fields. */
+  const [hpCompany, setHpCompany] = useState('')
+
+  const hydrateParentFromLastRegistration = useCallback(async (userId: string) => {
+    const supabase = createClient()
+    const { data } = await supabase
+      .from('registration_submissions')
+      .select('parent_first_name, parent_last_name, parent_email, parent_phone')
+      .eq('auth_user_id', userId)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+
+    if (!data) return
+    setParent((prev) => ({
+      ...prev,
+      parentFirstName: data.parent_first_name || prev.parentFirstName,
+      parentLastName: data.parent_last_name || prev.parentLastName,
+      parentEmail: data.parent_email || prev.parentEmail,
+      parentPhone: data.parent_phone || prev.parentPhone,
+    }))
+  }, [])
 
   const applyUserToParent = useCallback((user: User | null) => {
     if (!user) return
     const names = parentNamesFromUser(user)
     setParent((prev) => ({
       ...prev,
-      ...names,
+      // Do not overwrite hydrated DB values with empty strings (email/password users often lack name metadata).
+      parentFirstName: names.parentFirstName || prev.parentFirstName,
+      parentLastName: names.parentLastName || prev.parentLastName,
+      parentEmail: names.parentEmail || prev.parentEmail,
     }))
   }, [])
 
@@ -234,6 +253,9 @@ export default function RegistrationForm() {
         const u = session?.user ?? null
         setAuthUser(u)
         applyUserToParent(u)
+        if (u?.id) {
+          void hydrateParentFromLastRegistration(u.id)
+        }
         setAuthReady(true)
       })
     }
@@ -246,16 +268,19 @@ export default function RegistrationForm() {
       const u = session?.user ?? null
       setAuthUser(u)
       applyUserToParent(u)
+      if (u?.id) {
+        void hydrateParentFromLastRegistration(u.id)
+      }
     })
 
     return () => subscription.unsubscribe()
-  }, [applyUserToParent])
+  }, [applyUserToParent, hydrateParentFromLastRegistration])
 
   useEffect(() => {
     if (typeof window === 'undefined') return
     const params = new URLSearchParams(window.location.search)
     if (params.get('error') === 'auth') {
-      setError('Google sign-in did not complete. Please try again.')
+      setError('Sign-in did not complete. Please try again.')
       window.history.replaceState({}, '', window.location.pathname)
     }
   }, [])
@@ -287,6 +312,10 @@ export default function RegistrationForm() {
   function handleChildInput(id: string, e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) {
     const { name, value } = e.target
     updateChild(id, { [name]: value } as Partial<ChildFormState>)
+  }
+
+  function handlePhotoChange(id: string, file: File | null) {
+    updateChild(id, { childPhotoFile: file })
   }
 
   function handleExperienceLevelChange(id: string, value: string) {
@@ -330,11 +359,13 @@ export default function RegistrationForm() {
         playerExperienceOther: last.playerExperienceOther,
         gradeFall: last.gradeFall,
         schoolFall: last.schoolFall,
+        childPhotoUrl: last.childPhotoUrl,
         campWeeks: [...last.campWeeks],
         shirtSize: last.shirtSize,
         medicalNotes: last.medicalNotes,
         emergencyContactName: last.emergencyContactName,
         emergencyContactPhone: last.emergencyContactPhone,
+        childPhotoFile: null,
       }
       return [...list, copy]
     })
@@ -380,14 +411,43 @@ export default function RegistrationForm() {
     return GRADE_OPTIONS.find((g) => g.value === value)?.label ?? value
   }
 
-  function submitAll() {
+  async function submitAll() {
     const err = validateChildren()
     if (err) {
       setError(err)
       return
     }
     setError(null)
-    const payloadChildren: RegistrationChildInput[] = childrenList.map((c) => ({
+
+    if (hpCompany.trim() !== '') {
+      setError('Registration could not be completed. Please try again.')
+      return
+    }
+
+    if (childrenList.some((c) => c.childPhotoFile) && !authUser) {
+      setError('Please sign in before uploading child photos.')
+      return
+    }
+
+    setIsUploadingPhotos(true)
+    const childrenWithPhotos: ChildFormState[] = []
+    for (const child of childrenList) {
+      if (child.childPhotoFile) {
+        const { publicUrl, error: uploadError } = await uploadChildPhoto(child.childPhotoFile, child.id)
+        if (uploadError || !publicUrl) {
+          setIsUploadingPhotos(false)
+          setError(uploadError || `Could not upload photo for ${formatChildName(child) || 'player'}.`)
+          return
+        }
+        childrenWithPhotos.push({ ...child, childPhotoUrl: publicUrl })
+      } else {
+        childrenWithPhotos.push(child)
+      }
+    }
+    setIsUploadingPhotos(false)
+    setChildrenList(childrenWithPhotos)
+
+    const payloadChildren: RegistrationChildInput[] = childrenWithPhotos.map((c) => ({
       playerFirstName: c.playerFirstName,
       playerLastName: c.playerLastName,
       playerPronouns: c.playerPronouns,
@@ -397,6 +457,7 @@ export default function RegistrationForm() {
       playerExperienceOther: c.playerExperienceOther,
       gradeFall: c.gradeFall,
       schoolFall: c.schoolFall,
+      childPhotoUrl: c.childPhotoUrl,
       campWeeks: c.campWeeks,
       shirtSize: c.shirtSize,
       medicalNotes: c.medicalNotes,
@@ -415,6 +476,7 @@ export default function RegistrationForm() {
         secondParentEmail: parent.secondParentEmail,
         secondParentPhone: parent.secondParentPhone,
         children: payloadChildren,
+        hpCompany,
       })
       if (result.success) {
         setSubmitted(true)
@@ -443,6 +505,13 @@ export default function RegistrationForm() {
           {childrenList.map((item) => (
             <div key={item.id} className="mb-2 last:mb-0">
               <strong>{formatChildName(item) || 'Player'}:</strong> {item.campWeeks.join(', ')}
+              {item.childPhotoUrl && (
+                <img
+                  src={item.childPhotoUrl}
+                  alt={`${formatChildName(item) || 'Player'} profile`}
+                  className="w-12 h-12 rounded-full object-cover border border-[#e8d8ce] mt-2"
+                />
+              )}
             </div>
           ))}
           <div className="mt-3 font-bold">Total due: ${calculateTotal()}</div>
@@ -455,7 +524,7 @@ export default function RegistrationForm() {
     <div className="space-y-10">
       {step === 1 && (
         <form
-          className="bg-white rounded-2xl border border-[#e8d8ce] p-6 sm:p-8 shadow-sm"
+          className="relative bg-white rounded-2xl border border-[#e8d8ce] p-6 sm:p-8 shadow-sm"
           onSubmit={(e) => {
             e.preventDefault()
             if (!parent.parentPhone.trim()) {
@@ -470,7 +539,7 @@ export default function RegistrationForm() {
 
           {authUser ? (
             <p className="text-sm text-slate-600 mb-4">
-              Signed in with Google as <strong>{parent.parentEmail}</strong>. Add your phone number to continue.
+              Signed in as <strong>{parent.parentEmail}</strong>. Add your phone number if you have not already.
             </p>
           ) : (
             <div className="mb-6">
@@ -487,9 +556,29 @@ export default function RegistrationForm() {
                 </svg>
                 Continue with Google
               </button>
-              <p className="text-xs text-slate-500 mt-2 text-center">Or enter your details manually below.</p>
+              <p className="text-xs text-slate-500 mt-2 text-center">
+                Or{' '}
+                <a href="/login?next=%2Fregister" className="text-[#f05a28] font-semibold hover:underline">
+                  log in with email
+                </a>{' '}
+                and return here. You can also enter your details manually below.
+              </p>
             </div>
           )}
+
+          {/* Honeypot: hidden from users; bots often fill this. */}
+          <div className="absolute w-px h-px overflow-hidden opacity-0 pointer-events-none" aria-hidden="true">
+            <label htmlFor="hp-company">Company</label>
+            <input
+              id="hp-company"
+              name="company"
+              type="text"
+              tabIndex={-1}
+              autoComplete="off"
+              value={hpCompany}
+              onChange={(e) => setHpCompany(e.target.value)}
+            />
+          </div>
 
           <div className="grid sm:grid-cols-2 gap-5">
             <div>
@@ -641,6 +730,30 @@ export default function RegistrationForm() {
                   <Input name="schoolFall" placeholder="School name" value={child.schoolFall} onChange={(e) => handleChildInput(child.id, e)} required />
                 </div>
                 <div className="sm:col-span-2">
+                  <Label>Photo Upload</Label>
+                  <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+                    <label className="inline-flex items-center justify-center px-4 py-2 rounded-full bg-[#fff3ec] text-[#9b3e1f] font-semibold text-sm cursor-pointer hover:bg-[#fde6da] transition-colors">
+                      Upload Photo
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={(e) => handlePhotoChange(child.id, e.target.files?.[0] ?? null)}
+                      />
+                    </label>
+                    <span className="text-xs text-slate-500">
+                      {child.childPhotoFile?.name || (child.childPhotoUrl ? 'Photo uploaded' : 'No file selected')}
+                    </span>
+                    {child.childPhotoUrl && (
+                      <img
+                        src={child.childPhotoUrl}
+                        alt={`${formatChildName(child) || 'Player'} uploaded profile`}
+                        className="w-10 h-10 rounded-full object-cover border border-[#e8d8ce]"
+                      />
+                    )}
+                  </div>
+                </div>
+                <div className="sm:col-span-2">
                   <Label required>Weeks Available</Label>
                   <div className="grid sm:grid-cols-2 gap-3 mt-1">
                     {CAMP_SESSIONS.map((week) => (
@@ -785,11 +898,11 @@ export default function RegistrationForm() {
             </button>
             <button
               type="button"
-              onClick={submitAll}
-              disabled={isPending || !termsAccepted}
+              onClick={() => void submitAll()}
+              disabled={isPending || isUploadingPhotos || !termsAccepted}
               className="w-2/3 bg-[#062744] hover:bg-[#041f36] disabled:bg-[#4b6782] text-white font-bold py-3 rounded-full transition-colors shadow-md disabled:cursor-not-allowed"
             >
-              {isPending ? 'Submitting…' : 'Submit registration'}
+              {isUploadingPhotos ? 'Uploading photos…' : isPending ? 'Submitting…' : 'Submit registration'}
             </button>
           </div>
         </div>
