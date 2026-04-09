@@ -8,7 +8,14 @@ export const metadata = {
   description: 'Create your parent account and register for Next Level Soccer Development Camps at Beach Chalet.',
 }
 
-export default function RegisterPage() {
+export default async function RegisterPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ additionalChild?: string }>
+}) {
+  const sp = await searchParams
+  const additionalChildMode = sp.additionalChild === '1'
+
   return (
     <>
       <Navbar />
@@ -19,18 +26,19 @@ export default function RegisterPage() {
           ← Back to Home
         </Link>
         <h1 className="text-4xl sm:text-5xl font-extrabold text-white mb-3">
-          Register for Camp
+          {additionalChildMode ? 'Add another player' : 'Register for Camp'}
         </h1>
         <p className="text-slate-400 text-lg max-w-lg mx-auto">
-          Step 1 includes signing in or creating your account. Competitive middle school club players train Monday–Friday,
-          3:30–7:30 PM at Beach Chalet.
+          {additionalChildMode
+            ? 'Parent details load from your account when you sign in — add the new player’s information below.'
+            : 'Step 1 includes signing in or creating your account. Competitive middle school club players train Monday–Friday, 3:30–7:30 PM at Beach Chalet.'}
         </p>
       </div>
 
       {/* Form */}
       <main className="bg-[#f7f2e8] py-16 min-h-screen">
         <div className="max-w-2xl mx-auto px-4 sm:px-6">
-          <RegistrationForm />
+          <RegistrationForm additionalChildMode={additionalChildMode} />
         </div>
       </main>
 

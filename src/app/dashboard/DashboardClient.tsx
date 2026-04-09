@@ -1,13 +1,17 @@
 'use client'
 
+import Link from 'next/link'
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
+import { CAMP_SESSIONS } from '@/lib/camp-weeks'
 import { campNameFromWeekLabel, campDatesFromWeekLabel } from '@/lib/camp-display'
 import { REFUND_DEADLINE_LABEL } from '@/lib/refund-deadline'
 import {
   removePendingCampRegistration,
   requestRefundForCamp,
+  submitAdditionalWeeks,
   type DashboardCamp,
+  type DashboardIncrementalChild,
 } from './actions'
 
 function statusBadge(displayStatus: DashboardCamp['displayStatus']) {
@@ -20,11 +24,17 @@ function statusBadge(displayStatus: DashboardCamp['displayStatus']) {
   return { label: 'Pending', className: 'bg-amber-100 text-amber-800' }
 }
 
+function weekKeySet(child: DashboardIncrementalChild): Set<string> {
+  return new Set(child.existingWeeks.map((e) => e.week))
+}
+
 export default function DashboardClient({
   initialCamps,
+  incremental,
   refundWindowOpen,
 }: {
   initialCamps: DashboardCamp[]
+  incremental: { children: DashboardIncrementalChild[]; weekRemaining: Record<string, number> } | null
   refundWindowOpen: boolean
 }) {
   const [camps, setCamps] = useState(initialCamps)
@@ -32,6 +42,46 @@ export default function DashboardClient({
   const [success, setSuccess] = useState<string | null>(null)
   const [isPending, startTransition] = useTransition()
   const router = useRouter()
+  const [extraWeekSelection, setExtraWeekSelection] = useState<Record<string, Set<string>>>({})
+
+  const showIncrementalSection = incremental && incremental.children.length > 0
+  const canSubmitIncremental = incremental?.children.some((c) => c.submissionPending) ?? false
+
+  function toggleExtraWeek(childId: string, week: string, allowed: boolean) {
+    if (!allowed) return
+    setExtraWeekSelection((prev) => {
+      const cur = new Set(prev[childId] ?? [])
+      if (cur.has(week)) cur.delete(week)
+      else cur.add(week)
+      return { ...prev, [childId]: cur }
+    })
+  }
+
+  function saveAdditionalWeeks() {
+    const items = Object.entries(extraWeekSelection)
+      .map(([registrationChildId, set]) => ({
+        registrationChildId,
+        requestedWeeks: [...set],
+      }))
+      .filter((x) => x.requestedWeeks.length > 0)
+    if (items.length === 0) {
+      setMessage('Select at least one new camp week to add.')
+      setSuccess(null)
+      return
+    }
+    setMessage(null)
+    setSuccess(null)
+    startTransition(async () => {
+      const result = await submitAdditionalWeeks({ items })
+      if (!result.success) {
+        setMessage(result.error)
+        return
+      }
+      setSuccess('Additional weeks saved. Check your email for the amount due.')
+      setExtraWeekSelection({})
+      router.refresh()
+    })
+  }
 
   function cancelRegistration(camp: DashboardCamp) {
     if (
@@ -93,11 +143,21 @@ export default function DashboardClient({
   return (
     <main className="bg-[#f7f2e8] min-h-screen pt-28 pb-16">
       <div className="max-w-5xl mx-auto px-4 sm:px-6">
-        <h1 className="text-3xl font-extrabold text-[#062744] mb-1">Parent Dashboard</h1>
-        <p className="text-slate-600 mb-2 font-medium text-[#213c57]">Manage registrations</p>
-        <p className="text-slate-600 text-sm mb-8">
-          Registrations are tied to your account. Each row is one camp week for one player.
-        </p>
+        <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 mb-8">
+          <div>
+            <h1 className="text-3xl font-extrabold text-[#062744] mb-1">Parent Dashboard</h1>
+            <p className="text-slate-600 mb-2 font-medium text-[#213c57]">Manage registrations</p>
+            <p className="text-slate-600 text-sm">
+              Registrations are tied to your account. Each row is one camp week for one player.
+            </p>
+          </div>
+          <Link
+            href="/register?additionalChild=1"
+            className="shrink-0 inline-flex items-center justify-center bg-[#f05a28] hover:bg-[#d94e21] text-white font-semibold px-5 py-3 rounded-full text-sm transition-colors shadow-sm"
+          >
+            Add another child
+          </Link>
+        </div>
 
         {success && (
           <div className="mb-6 bg-green-50 border border-green-200 text-green-800 rounded-xl px-4 py-3 text-sm">
@@ -110,13 +170,123 @@ export default function DashboardClient({
           </div>
         )}
 
+        {showIncrementalSection && (
+          <section className="mb-10 bg-white border border-[#e8d8ce] rounded-2xl p-5 sm:p-6 shadow-sm">
+            <h2 className="text-lg font-bold text-[#062744] mb-1">Add more camp weeks</h2>
+            <p className="text-sm text-slate-600 mb-4">
+              Weeks you already hold are checked and locked. While your family registration is still pending payment,
+              you can select additional weeks that have openings.
+            </p>
+            {!incremental.children.some((c) => c.submissionPending) && (
+              <p className="text-sm text-amber-800 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2 mb-4">
+                Additional weeks can only be added online before your family registration is marked paid. For more weeks
+                after payment, email nextlevelsoccersf@gmail.com.
+              </p>
+            )}
+            <div className="space-y-6">
+              {incremental.children.map((child) => {
+                const held = weekKeySet(child)
+                const selected = extraWeekSelection[child.registrationChildId] ?? new Set<string>()
+                return (
+                  <div
+                    key={child.registrationChildId}
+                    className="border border-[#f0e2d9] rounded-xl p-4 bg-[#fffaf5]"
+                  >
+                    <div className="flex items-center gap-3 mb-3">
+                      {child.photoUrl ? (
+                        <img
+                          src={child.photoUrl}
+                          alt=""
+                          className="w-10 h-10 rounded-full object-cover border border-[#e8d8ce]"
+                        />
+                      ) : (
+                        <div className="w-10 h-10 rounded-full bg-slate-100 border border-[#e8d8ce]" />
+                      )}
+                      <div className="font-bold text-slate-900">
+                        {child.firstName} {child.lastName}
+                      </div>
+                    </div>
+                    <div className="grid sm:grid-cols-2 gap-2 text-sm">
+                      {CAMP_SESSIONS.map((week) => {
+                        const existing = child.existingWeeks.find((e) => e.week === week)
+                        const isHeld = held.has(week)
+                        const remaining = incremental.weekRemaining[week] ?? 0
+                        const canAdd =
+                          child.submissionPending && !isHeld && remaining > 0
+                        const isSelected = selected.has(week)
+                        return (
+                          <label
+                            key={week}
+                            className={`flex items-start gap-2 rounded-lg px-2 py-2 border ${
+                              isHeld
+                                ? 'border-slate-200 bg-slate-50 text-slate-500 cursor-not-allowed'
+                                : canAdd
+                                  ? 'border-[#e8d8ce] bg-white cursor-pointer hover:bg-[#fff8f3]'
+                                  : 'border-slate-100 bg-slate-50/80 text-slate-400 cursor-not-allowed'
+                            }`}
+                          >
+                            <input
+                              type="checkbox"
+                              className="mt-1 accent-[#f05a28] shrink-0"
+                              checked={isHeld || isSelected}
+                              disabled={isHeld || !canAdd}
+                              onChange={() =>
+                                toggleExtraWeek(child.registrationChildId, week, !!canAdd)
+                              }
+                            />
+                            <span>
+                              <span className="font-medium block">{campNameFromWeekLabel(week)}</span>
+                              <span className="text-xs text-slate-500">{campDatesFromWeekLabel(week)}</span>
+                              {isHeld && existing && (
+                                <span className="text-xs block mt-0.5 text-slate-500">
+                                  Already reserved ({existing.displayStatus === 'confirmed' ? 'paid/confirmed' : existing.displayStatus === 'refund_requested' ? 'refund requested' : 'pending'})
+                                </span>
+                              )}
+                              {!isHeld && !canAdd && child.submissionPending && (
+                                <span className="text-xs block mt-0.5">Full or unavailable</span>
+                              )}
+                            </span>
+                          </label>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+            {canSubmitIncremental && (
+              <button
+                type="button"
+                disabled={isPending}
+                onClick={() => saveAdditionalWeeks()}
+                className="mt-5 w-full sm:w-auto bg-[#062744] hover:bg-[#041f36] disabled:opacity-50 text-white font-bold py-3 px-8 rounded-full text-sm transition-colors"
+              >
+                {isPending ? 'Saving…' : 'Save additional weeks'}
+              </button>
+            )}
+          </section>
+        )}
+
         {camps.length === 0 ? (
           <div className="bg-white border border-[#e8d8ce] rounded-2xl p-8 text-slate-600">
-            No registrations yet. Go to registration to add your first player.
+            <p className="mb-4">No camp weeks on file yet.</p>
+            <div className="flex flex-wrap gap-3">
+              <Link
+                href="/register"
+                className="inline-block bg-[#062744] text-white font-semibold px-5 py-2 rounded-full text-sm hover:bg-[#041f36]"
+              >
+                Register for camp
+              </Link>
+              <Link
+                href="/register?additionalChild=1"
+                className="inline-block border border-[#062744] text-[#062744] font-semibold px-5 py-2 rounded-full text-sm hover:bg-[#f7f2e8]"
+              >
+                Add another child
+              </Link>
+            </div>
           </div>
         ) : (
           <div className="space-y-4">
-            {/* Desktop table header */}
             <div className="hidden sm:grid sm:grid-cols-12 gap-3 px-4 text-xs font-bold text-[#213c57] uppercase tracking-wide">
               <div className="sm:col-span-3">Camp</div>
               <div className="sm:col-span-3">Schedule</div>

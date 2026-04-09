@@ -3,7 +3,7 @@ import Navbar from '@/components/Navbar'
 import Footer from '@/components/Footer'
 import { createClient } from '@/lib/supabase/server'
 import { isRefundWindowOpenPacific } from '@/lib/refund-deadline'
-import { getDashboardCamps } from './actions'
+import { getDashboardPageData } from './actions'
 import DashboardClient from './DashboardClient'
 
 export const metadata = {
@@ -51,13 +51,13 @@ export default async function DashboardPage() {
     )
   }
 
-  const { camps } = await getDashboardCamps()
+  const { camps, incremental } = await getDashboardPageData()
   const refundWindowOpen = isRefundWindowOpenPacific()
 
   return (
     <>
       <Navbar />
-      <DashboardClient initialCamps={camps} refundWindowOpen={refundWindowOpen} />
+      <DashboardClient initialCamps={camps} incremental={incremental} refundWindowOpen={refundWindowOpen} />
       <Footer />
     </>
   )

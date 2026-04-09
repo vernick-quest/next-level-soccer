@@ -3,7 +3,11 @@
 import { useState, useTransition, useEffect, useCallback } from 'react'
 import type { User } from '@supabase/supabase-js'
 import { createClient } from '@/lib/supabase/client'
-import { submitFamilyRegistration, type RegistrationChildInput } from './actions'
+import {
+  getParentPrefillForAdditionalChild,
+  submitFamilyRegistration,
+  type RegistrationChildInput,
+} from './actions'
 import ParentEmailAuthPanel from '@/components/ParentEmailAuthPanel'
 import { uploadChildPhoto } from '@/lib/supabase/storage-upload'
 import { CAMP_SESSIONS } from '@/lib/camp-weeks'
@@ -215,7 +219,7 @@ function SectionHeader({ step, title }: { step: number; title: string }) {
   )
 }
 
-export default function RegistrationForm() {
+export default function RegistrationForm({ additionalChildMode = false }: { additionalChildMode?: boolean }) {
   const [step, setStep] = useState<Step>(1)
   const [parent, setParent] = useState<ParentInfoState>(emptyParent)
   const [childrenList, setChildrenList] = useState<ChildFormState[]>(() => [emptyChild()])
@@ -270,7 +274,21 @@ export default function RegistrationForm() {
         setAuthUser(u)
         applyUserToParent(u)
         if (u?.id) {
-          void hydrateParentFromLastRegistration(u.id)
+          if (additionalChildMode) {
+            void (async () => {
+              const p = await getParentPrefillForAdditionalChild()
+              if (!p) return
+              setParent((prev) => ({
+                ...prev,
+                parentFirstName: p.parentFirstName || prev.parentFirstName,
+                parentLastName: p.parentLastName || prev.parentLastName,
+                parentEmail: p.parentEmail || prev.parentEmail,
+                parentPhone: p.parentPhone ? formatUsPhoneAsYouType(p.parentPhone) : prev.parentPhone,
+              }))
+            })()
+          } else {
+            void hydrateParentFromLastRegistration(u.id)
+          }
         }
         setAuthReady(true)
       })
@@ -285,12 +303,26 @@ export default function RegistrationForm() {
       setAuthUser(u)
       applyUserToParent(u)
       if (u?.id) {
-        void hydrateParentFromLastRegistration(u.id)
+        if (additionalChildMode) {
+          void (async () => {
+            const p = await getParentPrefillForAdditionalChild()
+            if (!p) return
+            setParent((prev) => ({
+              ...prev,
+              parentFirstName: p.parentFirstName || prev.parentFirstName,
+              parentLastName: p.parentLastName || prev.parentLastName,
+              parentEmail: p.parentEmail || prev.parentEmail,
+              parentPhone: p.parentPhone ? formatUsPhoneAsYouType(p.parentPhone) : prev.parentPhone,
+            }))
+          })()
+        } else {
+          void hydrateParentFromLastRegistration(u.id)
+        }
       }
     })
 
     return () => subscription.unsubscribe()
-  }, [applyUserToParent, hydrateParentFromLastRegistration])
+  }, [additionalChildMode, applyUserToParent, hydrateParentFromLastRegistration])
 
   useEffect(() => {
     if (typeof window === 'undefined') return

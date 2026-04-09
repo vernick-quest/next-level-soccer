@@ -1,11 +1,10 @@
 'use server'
 
+import { Resend } from 'resend'
+import { insertDenormalizedRegistrationRows } from '@/lib/denormalized-registrations-insert'
 import { validateCampWeekCapacityForSubmission } from '@/lib/home-camp-spots'
+import { REPLY_TO_EMAIL, SENDER_EMAIL } from '@/lib/resend-sender'
 import { createClient, createServiceRoleClient } from '@/lib/supabase/server'
-
-/* This file does not send email. Resend settings live in `@/lib/resend-sender`:
-   SENDER_EMAIL = 'Next Level Soccer <info@nextlevelsoccersf.com>'
-   REPLY_TO_EMAIL = 'nextlevelsoccersf@gmail.com' (admin welcome + dashboard refund mail). */
 
 function throwSupabaseError(context: string, error: unknown): never {
   console.log(`[submitFamilyRegistration] ${context} — full Supabase error:`, error)
@@ -109,54 +108,19 @@ function buildRegistrationsRows(
   return rows
 }
 
-function stripOptionalRegistrationColumns(rows: Record<string, unknown>[]) {
-  return rows.map((r) => {
-    const {
-      registration_submission_id: _sid,
-      primary_position: _p1,
-      secondary_position: _p2,
-      playing_level: _pl,
-      soccer_club: _sc,
-      ...rest
-    } = r
-    return rest
-  })
-}
-
-function looksLikeMissingRegistrationColumnError(err: { message?: string } | null): boolean {
-  const m = (err?.message ?? '').toLowerCase()
-  return (
-    m.includes('schema cache') ||
-    m.includes('could not find') ||
-    m.includes('column') && m.includes('registrations') ||
-    (m.includes('column') && m.includes('does not exist'))
-  )
-}
-
-/**
- * Service role only — bypasses RLS. Retries without optional columns if the DB has not been migrated yet.
- */
 async function insertRegistrationsRows(rows: Record<string, unknown>[]): Promise<void> {
-  const client = createServiceRoleClient()
-
-  let { error } = await client.from('registrations').insert(rows)
-  if (!error) return
-
-  console.log('[submitFamilyRegistration] registrations insert (full columns) — full Supabase error:', error)
-
-  if (looksLikeMissingRegistrationColumnError(error)) {
-    const minimal = stripOptionalRegistrationColumns(rows)
-    ;({ error } = await client.from('registrations').insert(minimal))
-    if (!error) {
-      console.warn(
-        'registrations: inserted without registration_submission_id / position columns — run latest supabase-schema.sql on Supabase.',
-      )
-      return
-    }
-    console.log('[submitFamilyRegistration] registrations insert (legacy columns) — full Supabase error:', error)
+  try {
+    await insertDenormalizedRegistrationRows(rows, '[submitFamilyRegistration]')
+  } catch (e) {
+    throwSupabaseError('registrations insert', e)
   }
+}
 
-  throwSupabaseError('registrations insert', error)
+function escapeHtmlEmail(s: string) {
+  return s
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
 }
 
 export async function submitFamilyRegistration(data: FamilyRegistrationInput): Promise<ActionResult> {
@@ -296,5 +260,80 @@ export async function submitFamilyRegistration(data: FamilyRegistrationInput): P
     throw registrationsErr instanceof Error ? registrationsErr : new Error(JSON.stringify(registrationsErr))
   }
 
+  const apiKey = process.env.RESEND_API_KEY
+  if (apiKey) {
+    const parentName = `${data.parentFirstName} ${data.parentLastName}`.trim()
+    const newWeekCount = data.children.reduce((n, c) => n + c.campWeeks.length, 0)
+    const newAmountCents = newWeekCount * CAMP_PRICE_CENTS
+    const newLines = data.children
+      .map((c) => {
+        const name = `${c.playerFirstName} ${c.playerLastName}`.trim()
+        const weeks = c.campWeeks.join(', ')
+        return `<li><strong>${escapeHtmlEmail(name)}</strong> — ${escapeHtmlEmail(weeks)}</li>`
+      })
+      .join('')
+    const html = `
+      <div style="font-family: system-ui, sans-serif; max-width: 560px; line-height: 1.5;">
+        <h1 style="color: #062744;">We received your registration</h1>
+        <p>Hi ${escapeHtmlEmail(parentName)},</p>
+        <p>Thanks for signing up.</p>
+        <p><strong>Paid / confirmed</strong></p>
+        <p style="color:#64748b;font-size:14px;">None yet — spots are confirmed after we receive payment.</p>
+        <p><strong>New — payment required</strong></p>
+        <ul>${newLines}</ul>
+        <p><strong>Amount due for these camp weeks:</strong> $${(newAmountCents / 100).toLocaleString('en-US')}</p>
+        <p>Pay via Zelle or Venmo to confirm your spots. If you have questions, reply to this email.</p>
+        <p style="margin-top: 2rem; color: #64748b; font-size: 14px;">— Next Level Soccer SF</p>
+      </div>
+    `
+    console.log('Email payload generated', { type: 'initial_registration', newAmountCents })
+    console.log('DEBUG: Reached email block')
+    const resend = new Resend(apiKey)
+    const { error: sendErr } = await resend.emails.send({
+      from: SENDER_EMAIL,
+      replyTo: REPLY_TO_EMAIL,
+      to: data.parentEmail,
+      subject: 'Registration received — Next Level Soccer SF',
+      html,
+    })
+    if (sendErr) {
+      console.error('[submitFamilyRegistration] Resend send error:', sendErr)
+    }
+  } else {
+    console.warn('[submitFamilyRegistration] RESEND_API_KEY is not set; confirmation email skipped.')
+  }
+
   return { success: true }
+}
+
+export type ParentPrefill = {
+  parentFirstName: string
+  parentLastName: string
+  parentEmail: string
+  parentPhone: string
+}
+
+/** Latest submission on file — for “Add another child” from the dashboard. */
+export async function getParentPrefillForAdditionalChild(): Promise<ParentPrefill | null> {
+  const supabase = await createClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  if (!user) return null
+
+  const { data: sub, error } = await supabase
+    .from('registration_submissions')
+    .select('parent_first_name, parent_last_name, parent_email, parent_phone')
+    .eq('auth_user_id', user.id)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+
+  if (error || !sub) return null
+  return {
+    parentFirstName: sub.parent_first_name ?? '',
+    parentLastName: sub.parent_last_name ?? '',
+    parentEmail: sub.parent_email ?? '',
+    parentPhone: sub.parent_phone ?? '',
+  }
 }
