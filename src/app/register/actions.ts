@@ -1,9 +1,16 @@
 'use server'
 
-import type { SupabaseClient } from '@supabase/supabase-js'
 import { validateCampWeekCapacityForSubmission } from '@/lib/home-camp-spots'
-import { createClient } from '@/lib/supabase/server'
-import { createServiceRoleClient } from '@/lib/supabase/service'
+import { createClient, createServiceRoleClient } from '@/lib/supabase/server'
+
+function throwSupabaseError(context: string, error: unknown): never {
+  console.log(`[submitFamilyRegistration] ${context} — full Supabase error:`, error)
+  const payload =
+    error && typeof error === 'object'
+      ? JSON.stringify(error)
+      : JSON.stringify({ message: String(error) })
+  throw new Error(`${context}: ${payload}`)
+}
 
 export type RegistrationChildInput = {
   playerFirstName: string
@@ -127,24 +134,15 @@ function looksLikeMissingRegistrationColumnError(err: { message?: string } | nul
 }
 
 /**
- * Prefer service role so RLS never blocks denormalized rows. Falls back to the user client if the key is missing (local dev).
- * Retries without optional columns if the DB has not been migrated yet.
+ * Service role only — bypasses RLS. Retries without optional columns if the DB has not been migrated yet.
  */
-async function insertRegistrationsRows(
-  userSupabase: SupabaseClient,
-  rows: Record<string, unknown>[],
-): Promise<{ error: { message: string; code?: string } | null }> {
-  let client: SupabaseClient = userSupabase
-  try {
-    client = createServiceRoleClient()
-  } catch {
-    /* SUPABASE_SERVICE_ROLE_KEY missing — use session client (RLS must allow insert). */
-  }
+async function insertRegistrationsRows(rows: Record<string, unknown>[]): Promise<void> {
+  const client = createServiceRoleClient()
 
   let { error } = await client.from('registrations').insert(rows)
-  if (!error) return { error: null }
+  if (!error) return
 
-  console.error('registrations insert (full columns):', error)
+  console.log('[submitFamilyRegistration] registrations insert (full columns) — full Supabase error:', error)
 
   if (looksLikeMissingRegistrationColumnError(error)) {
     const minimal = stripOptionalRegistrationColumns(rows)
@@ -153,22 +151,12 @@ async function insertRegistrationsRows(
       console.warn(
         'registrations: inserted without registration_submission_id / position columns — run latest supabase-schema.sql on Supabase.',
       )
-      return { error: null }
+      return
     }
-    console.error('registrations insert (legacy columns):', error)
+    console.log('[submitFamilyRegistration] registrations insert (legacy columns) — full Supabase error:', error)
   }
 
-  return { error }
-}
-
-async function deleteRegistrationsForSubmission(submissionId: string) {
-  try {
-    const s = createServiceRoleClient()
-    const { error } = await s.from('registrations').delete().eq('registration_submission_id', submissionId)
-    if (error) console.error('deleteRegistrationsForSubmission:', error)
-  } catch {
-    /* no service key — cannot reliably clean denormalized rows */
-  }
+  throwSupabaseError('registrations insert', error)
 }
 
 export async function submitFamilyRegistration(data: FamilyRegistrationInput): Promise<ActionResult> {
@@ -202,6 +190,8 @@ export async function submitFamilyRegistration(data: FamilyRegistrationInput): P
   if (!user) {
     return { success: false, error: 'Please sign in before submitting registration.' }
   }
+
+  const db = createServiceRoleClient()
 
   const capacity = await validateCampWeekCapacityForSubmission(data.children)
   if (!capacity.ok) {
@@ -240,15 +230,17 @@ export async function submitFamilyRegistration(data: FamilyRegistrationInput): P
     status: 'pending',
   }
 
-  const { data: submission, error: subErr } = await supabase
+  const { data: submission, error: subErr } = await db
     .from('registration_submissions')
     .insert(parentRow)
     .select('id')
     .single()
 
-  if (subErr || !submission) {
-    console.error('Supabase submission insert:', subErr)
-    return { success: false, error: 'Registration failed. Please try again.' }
+  if (subErr) {
+    throwSupabaseError('registration_submissions insert', subErr)
+  }
+  if (!submission) {
+    throw new Error('registration_submissions insert: no row returned')
   }
 
   const childRows = data.children.map((child, index) => ({
@@ -275,22 +267,48 @@ export async function submitFamilyRegistration(data: FamilyRegistrationInput): P
     soccer_club: child.playerSoccerClub.trim(),
   }))
 
-  const { error: childrenErr } = await supabase.from('registration_children').insert(childRows)
+  const { error: childrenErr } = await db.from('registration_children').insert(childRows)
 
   if (childrenErr) {
-    console.error('Supabase children insert:', childrenErr)
-    await supabase.from('registration_submissions').delete().eq('id', submission.id)
-    return { success: false, error: 'Registration failed. Please try again.' }
+    const { error: rollbackErr } = await db.from('registration_submissions').delete().eq('id', submission.id)
+    if (rollbackErr) {
+      console.log(
+        '[submitFamilyRegistration] registration_children insert — full Supabase error:',
+        childrenErr,
+      )
+      console.log(
+        '[submitFamilyRegistration] rollback registration_submissions after children failure — full Supabase error:',
+        rollbackErr,
+      )
+      throw new Error(
+        JSON.stringify({ childrenInsert: childrenErr, rollbackSubmission: rollbackErr }),
+      )
+    }
+    throwSupabaseError('registration_children insert', childrenErr)
   }
 
   const registrationRows = buildRegistrationsRows(data, user.id, submission.id)
-  const { error: regErr } = await insertRegistrationsRows(supabase, registrationRows)
-
-  if (regErr) {
-    console.error('Supabase registrations insert:', regErr)
-    await deleteRegistrationsForSubmission(submission.id)
-    await supabase.from('registration_submissions').delete().eq('id', submission.id)
-    return { success: false, error: 'Registration failed. Please try again.' }
+  try {
+    await insertRegistrationsRows(registrationRows)
+  } catch (registrationsErr) {
+    const { error: delRegErr } = await db
+      .from('registrations')
+      .delete()
+      .eq('registration_submission_id', submission.id)
+    if (delRegErr) {
+      console.log(
+        '[submitFamilyRegistration] rollback registrations after insert failure — full Supabase error:',
+        delRegErr,
+      )
+    }
+    const { error: rollbackSubErr } = await db.from('registration_submissions').delete().eq('id', submission.id)
+    if (rollbackSubErr) {
+      console.log(
+        '[submitFamilyRegistration] rollback registration_submissions after registrations failure — full Supabase error:',
+        rollbackSubErr,
+      )
+    }
+    throw registrationsErr instanceof Error ? registrationsErr : new Error(JSON.stringify(registrationsErr))
   }
 
   return { success: true }

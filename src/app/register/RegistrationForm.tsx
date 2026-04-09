@@ -512,22 +512,27 @@ export default function RegistrationForm() {
     }))
 
     startTransition(async () => {
-      const result = await submitFamilyRegistration({
-        parentFirstName: parent.parentFirstName,
-        parentLastName: parent.parentLastName,
-        parentEmail: parent.parentEmail,
-        parentPhone: parent.parentPhone,
-        secondParentFirstName: parent.secondParentFirstName,
-        secondParentLastName: parent.secondParentLastName,
-        secondParentEmail: parent.secondParentEmail,
-        secondParentPhone: parent.secondParentPhone,
-        children: payloadChildren,
-        hpCompany,
-      })
-      if (result.success) {
-        setSubmitted(true)
-      } else {
-        setError(result.error)
+      try {
+        const result = await submitFamilyRegistration({
+          parentFirstName: parent.parentFirstName,
+          parentLastName: parent.parentLastName,
+          parentEmail: parent.parentEmail,
+          parentPhone: parent.parentPhone,
+          secondParentFirstName: parent.secondParentFirstName,
+          secondParentLastName: parent.secondParentLastName,
+          secondParentEmail: parent.secondParentEmail,
+          secondParentPhone: parent.secondParentPhone,
+          children: payloadChildren,
+          hpCompany,
+        })
+        if (result.success) {
+          setSubmitted(true)
+        } else {
+          setError(result.error)
+        }
+      } catch (e) {
+        console.error('submitFamilyRegistration threw:', e)
+        setError('Registration failed on the server. Please try again or contact support.')
       }
     })
   }

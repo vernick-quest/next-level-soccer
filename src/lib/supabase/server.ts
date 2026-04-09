@@ -24,3 +24,23 @@ export async function createClient() {
     },
   })
 }
+
+/** Server-only. Service role bypasses RLS — no user session; cookie handlers are no-ops. */
+export function createServiceRoleClient() {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY
+  if (!url || !key) {
+    throw new Error('Missing NEXT_PUBLIC_SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY')
+  }
+
+  return createServerClient(url, key, {
+    cookies: {
+      getAll() {
+        return []
+      },
+      setAll() {
+        /* service role — not tied to a browser session */
+      },
+    },
+  })
+}
