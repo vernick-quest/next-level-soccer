@@ -39,10 +39,6 @@ export type FamilyRegistrationInput = {
   parentLastName: string
   parentEmail: string
   parentPhone: string
-  secondParentFirstName: string
-  secondParentLastName: string
-  secondParentEmail: string
-  secondParentPhone: string
   children: RegistrationChildInput[]
   /** Honeypot — must be empty (see registration form). */
   hpCompany?: string
@@ -198,24 +194,6 @@ export async function submitFamilyRegistration(data: FamilyRegistrationInput): P
     return { success: false, error: capacity.error }
   }
 
-  const second =
-    data.secondParentFirstName ||
-    data.secondParentLastName ||
-    data.secondParentEmail ||
-    data.secondParentPhone
-      ? {
-          second_parent_first_name: data.secondParentFirstName || null,
-          second_parent_last_name: data.secondParentLastName || null,
-          second_parent_email: data.secondParentEmail || null,
-          second_parent_phone: data.secondParentPhone || null,
-        }
-      : {
-          second_parent_first_name: null,
-          second_parent_last_name: null,
-          second_parent_email: null,
-          second_parent_phone: null,
-        }
-
   const totalWeeks = data.children.reduce((n, c) => n + c.campWeeks.length, 0)
   const totalAmountCents = totalWeeks * CAMP_PRICE_CENTS
 
@@ -225,7 +203,10 @@ export async function submitFamilyRegistration(data: FamilyRegistrationInput): P
     parent_last_name: data.parentLastName,
     parent_email: data.parentEmail,
     parent_phone: data.parentPhone,
-    ...second,
+    second_parent_first_name: null,
+    second_parent_last_name: null,
+    second_parent_email: null,
+    second_parent_phone: null,
     total_amount_cents: totalAmountCents,
     status: 'pending',
   }

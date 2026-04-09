@@ -68,10 +68,6 @@ type ParentInfoState = {
   parentLastName: string
   parentEmail: string
   parentPhone: string
-  secondParentFirstName: string
-  secondParentLastName: string
-  secondParentEmail: string
-  secondParentPhone: string
 }
 
 type ChildFormState = Omit<RegistrationChildInput, 'playerGender'> & {
@@ -91,10 +87,6 @@ const emptyParent: ParentInfoState = {
   parentLastName: '',
   parentEmail: '',
   parentPhone: '',
-  secondParentFirstName: '',
-  secondParentLastName: '',
-  secondParentEmail: '',
-  secondParentPhone: '',
 }
 
 function emptyChild(): ChildFormState {
@@ -326,7 +318,7 @@ export default function RegistrationForm() {
 
   function handleParentChange(e: React.ChangeEvent<HTMLInputElement>) {
     const { name, value } = e.target
-    if (name === 'parentPhone' || name === 'secondParentPhone') {
+    if (name === 'parentPhone') {
       setParent((prev) => ({ ...prev, [name]: formatUsPhoneAsYouType(value) }))
       return
     }
@@ -518,10 +510,6 @@ export default function RegistrationForm() {
           parentLastName: parent.parentLastName,
           parentEmail: parent.parentEmail,
           parentPhone: parent.parentPhone,
-          secondParentFirstName: parent.secondParentFirstName,
-          secondParentLastName: parent.secondParentLastName,
-          secondParentEmail: parent.secondParentEmail,
-          secondParentPhone: parent.secondParentPhone,
           children: payloadChildren,
           hpCompany,
         })
@@ -588,10 +576,6 @@ export default function RegistrationForm() {
             }
             if (!isCompleteUsPhone(parent.parentPhone)) {
               setError('Please enter a complete 10-digit parent phone number.')
-              return
-            }
-            if (parent.secondParentPhone.trim() && !isCompleteUsPhone(parent.secondParentPhone)) {
-              setError('Second parent phone must be a complete 10-digit number, or leave it blank.')
               return
             }
             setError(null)
@@ -676,28 +660,6 @@ export default function RegistrationForm() {
             <div className="sm:col-span-2">
               <Label required>Parent Phone Number</Label>
               <Input name="parentPhone" type="tel" placeholder="(415) 555-0100" value={parent.parentPhone} onChange={handleParentChange} required />
-            </div>
-          </div>
-
-          <div className="mt-8 border-t border-[#f0e2d9] pt-6">
-            <h3 className="text-base font-bold text-slate-800 mb-4">Optional Second Parent / Guardian</h3>
-            <div className="grid sm:grid-cols-2 gap-5">
-              <div>
-                <Label>Second Parent First Name</Label>
-                <Input name="secondParentFirstName" placeholder="John" value={parent.secondParentFirstName} onChange={handleParentChange} />
-              </div>
-              <div>
-                <Label>Second Parent Last Name</Label>
-                <Input name="secondParentLastName" placeholder="Smith" value={parent.secondParentLastName} onChange={handleParentChange} />
-              </div>
-              <div>
-                <Label>Second Parent Email</Label>
-                <Input name="secondParentEmail" type="email" placeholder="john@example.com" value={parent.secondParentEmail} onChange={handleParentChange} />
-              </div>
-              <div>
-                <Label>Second Parent Phone</Label>
-                <Input name="secondParentPhone" type="tel" placeholder="(415) 555-0101" value={parent.secondParentPhone} onChange={handleParentChange} />
-              </div>
             </div>
           </div>
 
