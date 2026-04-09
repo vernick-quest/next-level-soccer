@@ -8,6 +8,21 @@ const KNOWN_WEEKS = new Set<string>(CAMP_SESSIONS)
 
 export type WeekSpotUsage = Record<string, { used: number; remaining: number }>
 
+/** Map a DB week string to the canonical `CAMP_SESSIONS` label (e.g. `Week of Jun 8 ($350)`). */
+export function canonicalCampWeekKey(raw: string | null | undefined): string | null {
+  if (raw == null || typeof raw !== 'string') return null
+  const t = raw.trim()
+  if (!t) return null
+  if (KNOWN_WEEKS.has(t)) return t
+  const noPrice = t.replace(/\s*\(\$[\d,]+\)\s*$/, '').trim()
+  for (const w of CAMP_SESSIONS) {
+    if (w === t) return w
+    const short = campNameFromWeekLabel(w)
+    if (short === noPrice || short === t) return w
+  }
+  return null
+}
+
 /** Per-week slot count this submission would consume (one per child × week). */
 export function aggregateRequestedCampWeekSlots(
   children: { campWeeks: string[] }[],
@@ -62,7 +77,17 @@ export async function validateCampWeekCapacityForSubmission(
   return { ok: true }
 }
 
-/** Counts each child × week for pending/confirmed submissions. Requires service role (homepage is public). */
+type RegistrationSpotRow = {
+  camp_session: string | null
+  camp_weeks?: string[] | null
+  status: string | null
+  refund_requested_weeks: string[] | null
+}
+
+/**
+ * Counts spots from `public.registrations`: each pending/confirmed row consumes one slot per week
+ * (`camp_weeks` when non-empty, otherwise `camp_session`). Rows with that week in `refund_requested_weeks` are excluded.
+ */
 export async function getWeekSpotUsage(): Promise<WeekSpotUsage | null> {
   let service
   try {
@@ -74,23 +99,36 @@ export async function getWeekSpotUsage(): Promise<WeekSpotUsage | null> {
   const used: Record<string, number> = {}
   for (const w of CAMP_SESSIONS) used[w] = 0
 
-  const { data, error } = await service.from('registration_children').select(`
-      camp_weeks,
-      registration_submissions ( status )
-    `)
+  let data: RegistrationSpotRow[] | null = null
+  let res = await service
+    .from('registrations')
+    .select('camp_session, camp_weeks, status, refund_requested_weeks')
 
-  if (error) {
-    console.error('getWeekSpotUsage:', error)
-    return null
+  if (res.error) {
+    const retry = await service.from('registrations').select('camp_session, status, refund_requested_weeks')
+    if (retry.error) {
+      console.error('getWeekSpotUsage:', retry.error)
+      return null
+    }
+    data = retry.data as RegistrationSpotRow[]
+  } else {
+    data = res.data as RegistrationSpotRow[]
   }
 
   for (const row of data ?? []) {
-    const sub = row.registration_submissions
-    const status = Array.isArray(sub) ? sub[0]?.status : (sub as { status?: string } | null)?.status
-    if (status !== 'pending' && status !== 'confirmed') continue
-    const weeks = row.camp_weeks ?? []
-    for (const w of weeks) {
-      if (w in used) used[w]++
+    const st = (row.status ?? 'pending').toLowerCase()
+    if (st !== 'pending' && st !== 'confirmed') continue
+
+    const refundSet = new Set(row.refund_requested_weeks ?? [])
+    const multi = row.camp_weeks
+    const weekSlots: string[] =
+      Array.isArray(multi) && multi.length > 0 ? multi : row.camp_session ? [row.camp_session] : []
+
+    for (const raw of weekSlots) {
+      const key = canonicalCampWeekKey(raw)
+      if (!key || !(key in used)) continue
+      if (refundSet.has(raw) || refundSet.has(key)) continue
+      used[key]++
     }
   }
 

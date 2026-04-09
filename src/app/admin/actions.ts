@@ -132,6 +132,16 @@ export async function markSubmissionConfirmed(submissionId: string): Promise<Act
     return { success: false, error: 'This registration is already confirmed or was not found.' }
   }
 
+  const { error: regSyncErr } = await service
+    .from('registrations')
+    .update({ status: 'confirmed' })
+    .eq('registration_submission_id', submissionId)
+    .eq('status', 'pending')
+
+  if (regSyncErr) {
+    console.error('markSubmissionConfirmed registrations sync:', regSyncErr)
+  }
+
   return { success: true }
 }
 

@@ -29,6 +29,8 @@ create table if not exists registrations (
 -- Optional legacy columns (aligned with registration_children / playing level incl. Silver as free text)
 alter table public.registrations add column if not exists user_id uuid references auth.users (id) on delete set null;
 alter table public.registrations add column if not exists refund_requested_weeks text[] default '{}';
+-- Optional: multiple weeks per row (mirrors registration_children). When null/empty, `camp_session` is used for spot counts.
+alter table public.registrations add column if not exists camp_weeks text[];
 alter table public.registrations add column if not exists primary_position text;
 alter table public.registrations add column if not exists secondary_position text;
 alter table public.registrations add column if not exists playing_level text;
@@ -127,6 +129,10 @@ exception
 end $$;
 
 create index if not exists registration_children_submission_id_idx on registration_children (submission_id);
+
+-- Denormalized `registrations` rows (per child × week) link back to the family submission for admin status sync.
+alter table public.registrations add column if not exists registration_submission_id uuid references public.registration_submissions (id) on delete set null;
+create index if not exists registrations_registration_submission_id_idx on public.registrations (registration_submission_id);
 
 alter table registration_submissions enable row level security;
 alter table registration_children enable row level security;

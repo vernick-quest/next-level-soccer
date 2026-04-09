@@ -43,6 +43,51 @@ export type ActionResult =
 
 const CAMP_PRICE_CENTS = 35_000
 
+function playerExperienceForRegistrations(child: RegistrationChildInput): string {
+  if (child.playerExperienceLevel === 'other') {
+    return child.playerExperienceOther.trim() || 'Other'
+  }
+  return child.playerExperienceLevel
+}
+
+/** One `registrations` row per camp week (dashboard + spot counter use this table). */
+function buildRegistrationsRows(
+  data: FamilyRegistrationInput,
+  userId: string,
+  submissionId: string,
+): Record<string, unknown>[] {
+  const rows: Record<string, unknown>[] = []
+  for (const child of data.children) {
+    for (const week of child.campWeeks) {
+      rows.push({
+        registration_submission_id: submissionId,
+        user_id: userId,
+        parent_first_name: data.parentFirstName,
+        parent_last_name: data.parentLastName,
+        parent_email: data.parentEmail,
+        parent_phone: data.parentPhone,
+        player_first_name: child.playerFirstName,
+        player_last_name: child.playerLastName,
+        player_dob: child.playerDob,
+        player_age_group: child.gradeFall,
+        player_experience: playerExperienceForRegistrations(child),
+        camp_session: week,
+        shirt_size: child.shirtSize,
+        child_photo_url: child.childPhotoUrl.trim() || null,
+        medical_notes: child.medicalNotes.trim() || null,
+        emergency_contact_name: child.emergencyContactName,
+        emergency_contact_phone: child.emergencyContactPhone,
+        status: 'pending',
+        refund_requested_weeks: [],
+        primary_position: child.primaryPosition.trim(),
+        secondary_position: child.secondaryPosition.trim(),
+        playing_level: child.playerExperienceLevel === 'other' ? null : child.playerExperienceLevel,
+      })
+    }
+  }
+  return rows
+}
+
 export async function submitFamilyRegistration(data: FamilyRegistrationInput): Promise<ActionResult> {
   if (data.hpCompany?.trim()) {
     return { success: false, error: 'Registration could not be completed. Please try again.' }
@@ -147,6 +192,15 @@ export async function submitFamilyRegistration(data: FamilyRegistrationInput): P
 
   if (childrenErr) {
     console.error('Supabase children insert:', childrenErr)
+    await supabase.from('registration_submissions').delete().eq('id', submission.id)
+    return { success: false, error: 'Registration failed. Please try again.' }
+  }
+
+  const registrationRows = buildRegistrationsRows(data, user.id, submission.id)
+  const { error: regErr } = await supabase.from('registrations').insert(registrationRows)
+
+  if (regErr) {
+    console.error('Supabase registrations insert:', regErr)
     await supabase.from('registration_submissions').delete().eq('id', submission.id)
     return { success: false, error: 'Registration failed. Please try again.' }
   }

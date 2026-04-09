@@ -33,7 +33,10 @@ const developmentPillars = [
 ] as const
 
 function HeroChevrons() {
-  const chev = (opacity: string, size: string, strokeWidth: string) => (
+  const size = 'w-[3.25rem] h-[3.25rem] sm:w-[4.25rem] sm:h-[4.25rem]'
+  const strokeWidth = '3.25'
+
+  const chev = (opacity: string) => (
     <svg
       viewBox="0 0 24 24"
       fill="none"
@@ -53,10 +56,10 @@ function HeroChevrons() {
   )
 
   return (
-    <div className="flex flex-col items-center justify-end -space-y-2 sm:-space-y-2.5">
-      {chev('opacity-30', 'w-10 h-10 sm:w-11 sm:h-11', '2')}
-      {chev('opacity-55', 'w-12 h-12 sm:w-14 sm:h-14', '2.5')}
-      {chev('opacity-100', 'w-[3.25rem] h-[3.25rem] sm:w-[4.25rem] sm:h-[4.25rem]', '3.25')}
+    <div className="flex flex-col items-center justify-end -space-y-3 sm:-space-y-4">
+      {chev('opacity-30')}
+      {chev('opacity-55')}
+      {chev('opacity-100')}
     </div>
   )
 }
@@ -216,12 +219,6 @@ export default async function HomePage() {
               Each week requires a minimum of {MIN_WEEK_PLAYERS} registered players to run. If a week does not reach{' '}
               {MIN_WEEK_PLAYERS}, that week may be canceled.
             </p>
-            {!spotUsage && (
-              <p className="text-slate-400 text-xs mt-2 max-w-xl mx-auto">
-                Live spot counts need <code className="text-[#213c57]">SUPABASE_SERVICE_ROLE_KEY</code> on the server; until
-                then, assume up to {WEEK_PLAYER_CAPACITY} spots per week.
-              </p>
-            )}
           </div>
 
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
