@@ -1,6 +1,7 @@
 'use server'
 
 import { Resend } from 'resend'
+import { REPLY_TO_EMAIL, SENDER_EMAIL } from '@/lib/resend-sender'
 import { createClient } from '@/lib/supabase/server'
 import { createServiceRoleClient } from '@/lib/supabase/service'
 import { getOwnerEmail } from '@/lib/admin'
@@ -197,8 +198,6 @@ export async function requestRefundForCamp(input: {
     process.env.OWNER_EMAIL ??
     process.env.ADMIN_EMAIL ??
     getOwnerEmail()
-  const from = process.env.RESEND_FROM_EMAIL ?? 'Next Level Soccer <onboarding@resend.dev>'
-
   if (apiKey && notifyTo) {
     const childName = `${row.player_first_name} ${row.player_last_name}`.trim()
     const parentName = `${row.parent_first_name} ${row.parent_last_name}`.trim()
@@ -213,7 +212,8 @@ export async function requestRefundForCamp(input: {
     `
     const resend = new Resend(apiKey)
     const { error: sendErr } = await resend.emails.send({
-      from,
+      from: SENDER_EMAIL,
+      replyTo: REPLY_TO_EMAIL,
       to: notifyTo,
       subject: `Refund request — ${childName} — ${input.week}`,
       html,

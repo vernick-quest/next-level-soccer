@@ -3,6 +3,10 @@
 import { validateCampWeekCapacityForSubmission } from '@/lib/home-camp-spots'
 import { createClient, createServiceRoleClient } from '@/lib/supabase/server'
 
+/* This file does not send email. Resend settings live in `@/lib/resend-sender`:
+   SENDER_EMAIL = 'Next Level Soccer <info@nextlevelsoccersf.com>'
+   REPLY_TO_EMAIL = 'nextlevelsoccersf@gmail.com' (admin welcome + dashboard refund mail). */
+
 function throwSupabaseError(context: string, error: unknown): never {
   console.log(`[submitFamilyRegistration] ${context} — full Supabase error:`, error)
   const payload =

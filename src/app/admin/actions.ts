@@ -2,6 +2,7 @@
 
 import { Resend } from 'resend'
 import { getStaffAdminUser } from '@/lib/admin'
+import { REPLY_TO_EMAIL, SENDER_EMAIL } from '@/lib/resend-sender'
 import { campWeekSortIndex } from '@/lib/camp-weeks'
 import { createClient } from '@/lib/supabase/server'
 import { createServiceRoleClient } from '@/lib/supabase/service'
@@ -197,7 +198,6 @@ export async function sendWelcomeEmail(submissionId: string): Promise<ActionOk> 
     .join('')
 
   const parentName = `${sub.parent_first_name} ${sub.parent_last_name}`.trim()
-  const from = process.env.RESEND_FROM_EMAIL ?? 'Next Level Soccer <onboarding@resend.dev>'
 
   const html = `
     <div style="font-family: system-ui, sans-serif; max-width: 560px; line-height: 1.5;">
@@ -213,7 +213,8 @@ export async function sendWelcomeEmail(submissionId: string): Promise<ActionOk> 
 
   const resend = new Resend(apiKey)
   const { error: sendErr } = await resend.emails.send({
-    from,
+    from: SENDER_EMAIL,
+    replyTo: REPLY_TO_EMAIL,
     to: sub.parent_email,
     subject: 'Welcome to Camp — Next Level Soccer SF',
     html,
