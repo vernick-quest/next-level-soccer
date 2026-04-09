@@ -7,6 +7,7 @@ import { submitFamilyRegistration, type RegistrationChildInput } from './actions
 import ParentEmailAuthPanel from '@/components/ParentEmailAuthPanel'
 import { uploadChildPhoto } from '@/lib/supabase/storage-upload'
 import { CAMP_SESSIONS } from '@/lib/camp-weeks'
+import { SOCCER_CLUB_DATALIST_ID, SOCCER_CLUB_SUGGESTIONS } from '@/lib/soccer-club-suggestions'
 import { formatUsPhoneAsYouType, isCompleteUsPhone } from '@/lib/phone-mask'
 
 const PRONOUNS_OPTIONS = [
@@ -106,6 +107,7 @@ function emptyChild(): ChildFormState {
     playerGender: '',
     playerExperienceLevel: '',
     playerExperienceOther: '',
+    playerSoccerClub: '',
     primaryPosition: '',
     secondaryPosition: '',
     gradeFall: '',
@@ -158,6 +160,7 @@ function Input({
   onChange,
   required,
   readOnly,
+  list,
 }: {
   name: string
   type?: string
@@ -166,6 +169,7 @@ function Input({
   onChange: (e: React.ChangeEvent<HTMLInputElement>) => void
   required?: boolean
   readOnly?: boolean
+  list?: string
 }) {
   return (
     <input
@@ -176,6 +180,7 @@ function Input({
       onChange={onChange}
       required={required}
       readOnly={readOnly}
+      list={list}
       className={`w-full border border-[#e8d8ce] rounded-xl px-4 py-3 text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-[#f05a28] focus:border-transparent transition-all text-sm ${readOnly ? 'bg-slate-100' : ''}`}
     />
   )
@@ -384,6 +389,7 @@ export default function RegistrationForm() {
         playerGender: last.playerGender,
         playerExperienceLevel: last.playerExperienceLevel,
         playerExperienceOther: last.playerExperienceOther,
+        playerSoccerClub: last.playerSoccerClub,
         primaryPosition: last.primaryPosition,
         secondaryPosition: last.secondaryPosition,
         gradeFall: last.gradeFall,
@@ -416,6 +422,9 @@ export default function RegistrationForm() {
       if (!c.playerExperienceLevel) return `Please select playing level for player ${i + 1}.`
       if (c.playerExperienceLevel === 'other' && !c.playerExperienceOther.trim()) {
         return `Please describe playing level for player ${i + 1} (Other).`
+      }
+      if (!c.playerSoccerClub.trim()) {
+        return `Please enter the soccer club or program for player ${i + 1}.`
       }
       if (!c.primaryPosition) return `Please select primary position for player ${i + 1}.`
       if (!c.secondaryPosition) return `Please select secondary position for player ${i + 1}.`
@@ -489,6 +498,7 @@ export default function RegistrationForm() {
       playerGender: c.playerGender as 'boy' | 'girl',
       playerExperienceLevel: c.playerExperienceLevel,
       playerExperienceOther: c.playerExperienceOther,
+      playerSoccerClub: c.playerSoccerClub,
       primaryPosition: c.primaryPosition,
       secondaryPosition: c.secondaryPosition,
       gradeFall: c.gradeFall,
@@ -694,6 +704,11 @@ export default function RegistrationForm() {
 
       {step === 2 && (
         <div className="space-y-6">
+          <datalist id={SOCCER_CLUB_DATALIST_ID}>
+            {SOCCER_CLUB_SUGGESTIONS.map((club) => (
+              <option key={club} value={club} />
+            ))}
+          </datalist>
           {childrenList.map((child, index) => (
             <div key={child.id} className="bg-white rounded-2xl border border-[#e8d8ce] p-6 sm:p-8 shadow-sm">
               <div className="flex items-start justify-between gap-3 mb-6">
@@ -773,6 +788,21 @@ export default function RegistrationForm() {
                     />
                   </div>
                 )}
+                <div className="sm:col-span-2">
+                  <Label required>Soccer club this year</Label>
+                  <p className="text-xs text-slate-500 mt-0.5 mb-1.5 leading-snug">
+                    Choose a suggestion or type any club. Includes Seals, Glens, Elite, Dynamo, Vikings, United, Mission IFC,
+                    Aftershocks, Girls Unite, School Team, SFYS, and others.
+                  </p>
+                  <Input
+                    name="playerSoccerClub"
+                    list={SOCCER_CLUB_DATALIST_ID}
+                    placeholder="Type or select — e.g. Dynamo, Glens, School Team"
+                    value={child.playerSoccerClub}
+                    onChange={(e) => handleChildInput(child.id, e)}
+                    required
+                  />
+                </div>
                 <div>
                   <Label required>Primary position</Label>
                   <Select
@@ -946,6 +976,12 @@ export default function RegistrationForm() {
                           {item.playerExperienceLevel === 'other'
                             ? `Other: ${item.playerExperienceOther}`
                             : item.playerExperienceLevel}
+                        </>
+                      )}
+                      {item.playerSoccerClub.trim() && (
+                        <>
+                          {' '}
+                          · Club: {item.playerSoccerClub.trim()}
                         </>
                       )}
                       {(item.primaryPosition || item.secondaryPosition) && (

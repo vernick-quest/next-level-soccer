@@ -1,7 +1,9 @@
 'use server'
 
+import type { SupabaseClient } from '@supabase/supabase-js'
 import { validateCampWeekCapacityForSubmission } from '@/lib/home-camp-spots'
 import { createClient } from '@/lib/supabase/server'
+import { createServiceRoleClient } from '@/lib/supabase/service'
 
 export type RegistrationChildInput = {
   playerFirstName: string
@@ -11,6 +13,8 @@ export type RegistrationChildInput = {
   playerGender: 'boy' | 'girl'
   playerExperienceLevel: string
   playerExperienceOther: string
+  /** Club / program they play for this year (free text; suggestions on the form). */
+  playerSoccerClub: string
   primaryPosition: string
   secondaryPosition: string
   gradeFall: string
@@ -43,6 +47,15 @@ export type ActionResult =
 
 const CAMP_PRICE_CENTS = 35_000
 
+/** Postgres `date` — HTML date input is usually YYYY-MM-DD; normalize edge cases. */
+function sanitizePlayerDobForDb(dob: string): string {
+  const t = dob.trim()
+  if (/^\d{4}-\d{2}-\d{2}$/.test(t)) return t
+  const d = new Date(t)
+  if (!Number.isNaN(d.getTime())) return d.toISOString().slice(0, 10)
+  return t
+}
+
 function playerExperienceForRegistrations(child: RegistrationChildInput): string {
   if (child.playerExperienceLevel === 'other') {
     return child.playerExperienceOther.trim() || 'Other'
@@ -68,7 +81,7 @@ function buildRegistrationsRows(
         parent_phone: data.parentPhone,
         player_first_name: child.playerFirstName,
         player_last_name: child.playerLastName,
-        player_dob: child.playerDob,
+        player_dob: sanitizePlayerDobForDb(child.playerDob),
         player_age_group: child.gradeFall,
         player_experience: playerExperienceForRegistrations(child),
         camp_session: week,
@@ -82,10 +95,80 @@ function buildRegistrationsRows(
         primary_position: child.primaryPosition.trim(),
         secondary_position: child.secondaryPosition.trim(),
         playing_level: child.playerExperienceLevel === 'other' ? null : child.playerExperienceLevel,
+        soccer_club: child.playerSoccerClub.trim(),
       })
     }
   }
   return rows
+}
+
+function stripOptionalRegistrationColumns(rows: Record<string, unknown>[]) {
+  return rows.map((r) => {
+    const {
+      registration_submission_id: _sid,
+      primary_position: _p1,
+      secondary_position: _p2,
+      playing_level: _pl,
+      soccer_club: _sc,
+      ...rest
+    } = r
+    return rest
+  })
+}
+
+function looksLikeMissingRegistrationColumnError(err: { message?: string } | null): boolean {
+  const m = (err?.message ?? '').toLowerCase()
+  return (
+    m.includes('schema cache') ||
+    m.includes('could not find') ||
+    m.includes('column') && m.includes('registrations') ||
+    (m.includes('column') && m.includes('does not exist'))
+  )
+}
+
+/**
+ * Prefer service role so RLS never blocks denormalized rows. Falls back to the user client if the key is missing (local dev).
+ * Retries without optional columns if the DB has not been migrated yet.
+ */
+async function insertRegistrationsRows(
+  userSupabase: SupabaseClient,
+  rows: Record<string, unknown>[],
+): Promise<{ error: { message: string; code?: string } | null }> {
+  let client: SupabaseClient = userSupabase
+  try {
+    client = createServiceRoleClient()
+  } catch {
+    /* SUPABASE_SERVICE_ROLE_KEY missing — use session client (RLS must allow insert). */
+  }
+
+  let { error } = await client.from('registrations').insert(rows)
+  if (!error) return { error: null }
+
+  console.error('registrations insert (full columns):', error)
+
+  if (looksLikeMissingRegistrationColumnError(error)) {
+    const minimal = stripOptionalRegistrationColumns(rows)
+    ;({ error } = await client.from('registrations').insert(minimal))
+    if (!error) {
+      console.warn(
+        'registrations: inserted without registration_submission_id / position columns — run latest supabase-schema.sql on Supabase.',
+      )
+      return { error: null }
+    }
+    console.error('registrations insert (legacy columns):', error)
+  }
+
+  return { error }
+}
+
+async function deleteRegistrationsForSubmission(submissionId: string) {
+  try {
+    const s = createServiceRoleClient()
+    const { error } = await s.from('registrations').delete().eq('registration_submission_id', submissionId)
+    if (error) console.error('deleteRegistrationsForSubmission:', error)
+  } catch {
+    /* no service key — cannot reliably clean denormalized rows */
+  }
 }
 
 export async function submitFamilyRegistration(data: FamilyRegistrationInput): Promise<ActionResult> {
@@ -106,6 +189,9 @@ export async function submitFamilyRegistration(data: FamilyRegistrationInput): P
     }
     if (!child.primaryPosition.trim() || !child.secondaryPosition.trim()) {
       return { success: false, error: 'Each player must have primary and secondary positions selected.' }
+    }
+    if (!child.playerSoccerClub.trim()) {
+      return { success: false, error: 'Please enter the soccer club or program each player is with this year.' }
     }
   }
 
@@ -186,6 +272,7 @@ export async function submitFamilyRegistration(data: FamilyRegistrationInput): P
     medical_notes: child.medicalNotes.trim() || null,
     emergency_contact_name: child.emergencyContactName,
     emergency_contact_phone: child.emergencyContactPhone,
+    soccer_club: child.playerSoccerClub.trim(),
   }))
 
   const { error: childrenErr } = await supabase.from('registration_children').insert(childRows)
@@ -197,10 +284,11 @@ export async function submitFamilyRegistration(data: FamilyRegistrationInput): P
   }
 
   const registrationRows = buildRegistrationsRows(data, user.id, submission.id)
-  const { error: regErr } = await supabase.from('registrations').insert(registrationRows)
+  const { error: regErr } = await insertRegistrationsRows(supabase, registrationRows)
 
   if (regErr) {
     console.error('Supabase registrations insert:', regErr)
+    await deleteRegistrationsForSubmission(submission.id)
     await supabase.from('registration_submissions').delete().eq('id', submission.id)
     return { success: false, error: 'Registration failed. Please try again.' }
   }

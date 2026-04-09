@@ -34,6 +34,7 @@ alter table public.registrations add column if not exists camp_weeks text[];
 alter table public.registrations add column if not exists primary_position text;
 alter table public.registrations add column if not exists secondary_position text;
 alter table public.registrations add column if not exists playing_level text;
+alter table public.registrations add column if not exists soccer_club text;
 
 alter table registrations enable row level security;
 alter table registrations add column if not exists child_photo_url text;
@@ -49,6 +50,14 @@ begin
     select 1 from pg_policies where schemaname = 'public' and tablename = 'registrations' and policyname = 'Admins can view registrations'
   ) then
     create policy "Admins can view registrations" on registrations for select using (auth.role() = 'authenticated');
+  end if;
+  if not exists (
+    select 1 from pg_policies where schemaname = 'public' and tablename = 'registrations' and policyname = 'Parents insert own registrations'
+  ) then
+    create policy "Parents insert own registrations"
+      on registrations for insert
+      to authenticated
+      with check (auth.uid() = user_id);
   end if;
 end $$;
 
@@ -113,6 +122,7 @@ alter table registration_children add column if not exists child_photo_url text;
 alter table registration_children add column if not exists primary_position text;
 alter table registration_children add column if not exists secondary_position text;
 alter table registration_children add column if not exists refund_requested_weeks text[] default '{}';
+alter table registration_children add column if not exists soccer_club text;
 
 do $$
 begin

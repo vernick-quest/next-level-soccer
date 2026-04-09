@@ -15,9 +15,10 @@ function defaultScores(): Record<ReportMetricKey, number> {
 
 function formatPlayerLabel(p: CoachPlayerRow) {
   const name = `${p.player_first_name} ${p.player_last_name}`.trim()
+  const club = p.soccer_club?.trim() ? ` · ${p.soccer_club.trim()}` : ''
   const parent = p.registration_submissions
   const parentBit = parent ? ` — ${parent.parent_first_name} ${parent.parent_last_name}` : ''
-  return `${name}${parentBit}`
+  return `${name}${club}${parentBit}`
 }
 
 export default function CoachReportForm({
@@ -150,6 +151,7 @@ export default function CoachReportForm({
                   )}
                   <p className="text-xs text-slate-500">
                     Grade (fall): {selectedPlayer.grade_fall}
+                    {selectedPlayer.soccer_club?.trim() ? ` · Club: ${selectedPlayer.soccer_club.trim()}` : ''}
                     {selectedPlayer.registration_submissions?.parent_email
                       ? ` · Parent email: ${selectedPlayer.registration_submissions.parent_email}`
                       : null}

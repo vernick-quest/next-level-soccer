@@ -10,6 +10,7 @@ export type CoachPlayerRow = {
   player_last_name: string
   grade_fall: string
   child_photo_url: string | null
+  soccer_club: string | null
   registration_submissions: {
     parent_first_name: string
     parent_last_name: string
@@ -36,6 +37,7 @@ export async function listPlayersForCoach(): Promise<{
       player_last_name,
       grade_fall,
       child_photo_url,
+      soccer_club,
       registration_submissions (
         parent_first_name,
         parent_last_name,
@@ -66,6 +68,7 @@ export async function listPlayersForCoach(): Promise<{
       player_last_name: row.player_last_name,
       grade_fall: row.grade_fall,
       child_photo_url: row.child_photo_url,
+      soccer_club: row.soccer_club ?? null,
       registration_submissions: submission,
     }
   })
