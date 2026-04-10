@@ -2,6 +2,8 @@ import Link from 'next/link'
 import Image from 'next/image'
 import Navbar from '@/components/Navbar'
 import Footer from '@/components/Footer'
+import { REPORT_CARD_SKILL_PILLARS_DOC } from '@/lib/report-card-doc-reference'
+import { REPORT_CARD_CATEGORY_ACCENT } from '@/lib/report-card-ui'
 import { CAMP_SESSIONS } from '@/lib/camp-weeks'
 import { getWeekSpotUsage, WEEK_PLAYER_CAPACITY } from '@/lib/home-camp-spots'
 
@@ -25,16 +27,9 @@ const coaches = [
   },
 ]
 
-const developmentPillars = [
-  { label: 'Technical', subtitle: 'The Ball Master' },
-  { label: 'Tactical', subtitle: 'The Soccer IQ' },
-  { label: 'Physical', subtitle: 'The Athlete' },
-  { label: 'Psychological', subtitle: 'The Competitor' },
-] as const
-
 function HeroChevrons() {
-  const size = 'w-[3.25rem] h-[3.25rem] sm:w-[4.25rem] sm:h-[4.25rem]'
-  const strokeWidth = '3.25'
+  const size = 'w-10 h-10 sm:w-[3.25rem] sm:h-[3.25rem]'
+  const strokeWidth = '3'
 
   const chev = (opacity: string) => (
     <svg
@@ -56,7 +51,7 @@ function HeroChevrons() {
   )
 
   return (
-    <div className="flex flex-col items-center justify-end -space-y-3 sm:-space-y-4">
+    <div className="flex flex-col items-center justify-end -space-y-2 sm:-space-y-2.5">
       {chev('opacity-30')}
       {chev('opacity-55')}
       {chev('opacity-100')}
@@ -71,8 +66,8 @@ export default async function HomePage() {
     <>
       <Navbar />
 
-      {/* Hero */}
-      <section className="relative min-h-screen flex items-center bg-gradient-to-br from-[#041f36] via-[#062744] to-[#041f36] overflow-hidden">
+      {/* Hero: flex column so scroll chevrons sit above orange section without overlapping CTAs */}
+      <section className="relative min-h-screen flex flex-col bg-gradient-to-br from-[#041f36] via-[#062744] to-[#041f36] overflow-hidden">
         <div
           className="absolute inset-0 opacity-10"
           style={{
@@ -82,69 +77,97 @@ export default async function HomePage() {
           }}
         />
 
-        <div className="relative max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-32 text-center">
-          <div className="flex justify-center mb-6">
-            <Image
-              src="/next-level-logo.png"
-              alt="Next Level Soccer San Francisco"
-              width={128}
-              height={128}
-              className="rounded-full border-4 border-white/80 shadow-2xl shadow-black/30"
-              priority
-            />
-          </div>
-          <span className="inline-block bg-[#f05a28]/15 text-[#ffd7c8] border border-[#f05a28]/40 text-xs sm:text-sm font-semibold px-3 sm:px-4 py-1.5 rounded-full mb-6 tracking-wide uppercase max-w-[95vw]">
-            San Francisco Youth Soccer Training
-          </span>
-          <h1 className="text-4xl sm:text-6xl lg:text-7xl font-extrabold text-white leading-tight mb-6">
-            Reach Your{' '}
-            <span className="text-transparent bg-clip-text bg-gradient-to-r from-[#f05a28] to-[#ff8c61]">
-              Next Level
+        <div className="relative z-[1] flex-1 flex flex-col justify-center min-h-0">
+          <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-12 sm:py-16 text-center w-full">
+            <div className="flex justify-center mb-6">
+              <Image
+                src="/next-level-logo.png"
+                alt="Next Level Soccer San Francisco"
+                width={128}
+                height={128}
+                className="rounded-full border-4 border-white/80 shadow-2xl shadow-black/30"
+                priority
+              />
+            </div>
+            <span className="inline-block bg-[#f05a28]/15 text-[#ffd7c8] border border-[#f05a28]/40 text-xs sm:text-sm font-semibold px-3 sm:px-4 py-1.5 rounded-full mb-6 tracking-wide uppercase max-w-[95vw]">
+              San Francisco Youth Soccer Training
             </span>
-          </h1>
-          <p className="text-lg sm:text-xl text-slate-300 max-w-3xl mx-auto mb-10 leading-relaxed px-1">
-            Next Level Soccer Development Camps at Beach Chalet for competitive middle school club players. Monday through Friday, 3:30-7:30 PM.
-          </p>
-          <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            <Link
-              href="/register"
-              className="bg-[#f05a28] hover:bg-[#d94e21] text-white font-bold px-6 sm:px-8 py-3.5 sm:py-4 rounded-full text-base sm:text-lg transition-all shadow-lg shadow-[#3a1a0f]/40 hover:-translate-y-0.5 text-center leading-snug max-w-[min(100%,22rem)] sm:max-w-none"
-            >
-              Register for Summer Camps 2026
-            </Link>
-            <a
-              href="#sessions"
-              className="border border-slate-400 text-slate-200 hover:bg-white/10 font-semibold px-8 py-4 rounded-full text-lg transition-all"
-            >
-              View Schedule
-            </a>
+            <h1 className="text-4xl sm:text-6xl lg:text-7xl font-extrabold text-white leading-tight mb-6">
+              Reach Your{' '}
+              <span className="text-transparent bg-clip-text bg-gradient-to-r from-[#f05a28] to-[#ff8c61]">
+                Next Level
+              </span>
+            </h1>
+            <p className="text-lg sm:text-xl text-slate-300 max-w-3xl mx-auto mb-10 leading-relaxed px-1">
+              Next Level Soccer Development Camps at Beach Chalet for competitive middle school club players. Monday
+              through Friday, 3:30-7:30 PM.
+            </p>
+            <div className="flex flex-col sm:flex-row gap-4 justify-center pb-2 sm:pb-4">
+              <Link
+                href="/register"
+                className="bg-[#f05a28] hover:bg-[#d94e21] text-white font-bold px-6 sm:px-8 py-3.5 sm:py-4 rounded-full text-base sm:text-lg transition-all shadow-lg shadow-[#3a1a0f]/40 hover:-translate-y-0.5 text-center leading-snug max-w-[min(100%,22rem)] sm:max-w-none mx-auto sm:mx-0"
+              >
+                Register for Summer Camps 2026
+              </Link>
+              <a
+                href="#sessions"
+                className="border border-slate-400 text-slate-200 hover:bg-white/10 font-semibold px-8 py-4 rounded-full text-lg transition-all mx-auto sm:mx-0 w-full max-w-[min(100%,22rem)] sm:w-auto text-center sm:max-w-none"
+              >
+                View Schedule
+              </a>
+            </div>
           </div>
         </div>
 
-        <a
-          href="#player-development"
-          className="absolute bottom-5 sm:bottom-7 left-1/2 -translate-x-1/2 text-white hero-arrow-pulse rounded-full focus:outline-none focus-visible:ring-2 focus-visible:ring-white/50 focus-visible:ring-offset-2 focus-visible:ring-offset-[#041f36] pb-1"
-          aria-label="Scroll to player development and report cards"
-        >
-          <HeroChevrons />
-        </a>
+        <div className="relative z-[1] shrink-0 flex justify-center px-4 pb-2 sm:pb-3 pt-1">
+          <a
+            href="#player-development"
+            className="text-white hero-arrow-pulse rounded-full focus:outline-none focus-visible:ring-2 focus-visible:ring-white/50 focus-visible:ring-offset-2 focus-visible:ring-offset-[#041f36]"
+            aria-label="Scroll to player development and report cards"
+          >
+            <HeroChevrons />
+          </a>
+        </div>
       </section>
 
-      {/* Player development — report cards & pillars */}
-      <section id="player-development" className="bg-[#f05a28] py-10 sm:py-12 lg:py-14 scroll-mt-20">
+      {/* Player development — same four pillars & copy as /report-card-skills */}
+      <section id="player-development" className="bg-[#f05a28] py-8 sm:py-10 lg:py-12 scroll-mt-20">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
-          <p className="text-center text-white font-bold text-base sm:text-lg lg:text-xl max-w-3xl mx-auto mb-8 sm:mb-10 leading-relaxed px-1">
+          <p className="text-center text-white font-bold text-base sm:text-lg lg:text-xl max-w-3xl mx-auto mb-2 leading-relaxed px-1">
             Every week of camp comes with a report card to track the performance improvements vital to the development
             of the individual player. These can be viewed on the website to track long-term progress.
           </p>
-          <ul className="grid sm:grid-cols-2 gap-4 sm:gap-5 max-w-4xl mx-auto list-none p-0 m-0">
-            {developmentPillars.map((pillar) => (
-              <li key={pillar.label}>
-                <div className="rounded-2xl bg-white px-5 py-4 shadow-md border border-white/90 text-center sm:text-left h-full">
-                  <p className="text-sm sm:text-base leading-relaxed m-0 font-bold">
-                    <span className="text-[#f05a28]">{pillar.label}</span>
-                    <span className="text-[#062744]"> ({pillar.subtitle})</span>
-                  </p>
+          <p className="text-center text-sm text-white/90 max-w-2xl mx-auto mb-8 sm:mb-10">
+            <Link href="/report-card-skills" className="font-semibold underline decoration-white/50 underline-offset-2 hover:decoration-white">
+              Full report card guide
+            </Link>{' '}
+            — rating scale and the twelve skills we assess.
+          </p>
+          <ul className="grid sm:grid-cols-2 gap-4 sm:gap-5 max-w-5xl mx-auto list-none p-0 m-0">
+            {REPORT_CARD_SKILL_PILLARS_DOC.map((pillar) => (
+              <li key={pillar.id}>
+                <div
+                  className={`rounded-2xl border border-[#e8d8ce] shadow-sm overflow-hidden border-l-4 h-full ${REPORT_CARD_CATEGORY_ACCENT[pillar.id] ?? 'border-l-[#062744]'}`}
+                >
+                  <div className="bg-white/90 px-4 sm:px-5 py-3 sm:py-4 border-b border-[#f0e2d9]">
+                    <h3 className="text-xl font-bold text-[#062744] text-left">
+                      {pillar.title}{' '}
+                      <span className="text-[#f05a28] font-bold">({pillar.subtitle})</span>
+                    </h3>
+                  </div>
+                  <ul className="px-4 sm:px-5 py-3 sm:py-4 space-y-3 sm:space-y-4 text-sm text-slate-800 bg-white list-none m-0 text-left">
+                    {pillar.skills.map((s) => (
+                      <li key={s.name} className="flex gap-2 sm:gap-3">
+                        <span className="text-[#f05a28] font-bold mt-0.5 shrink-0" aria-hidden>
+                          *
+                        </span>
+                        <div>
+                          <span className="font-bold text-[#062744]">{s.name}:</span>{' '}
+                          <span className="text-slate-700">{s.description}</span>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
                 </div>
               </li>
             ))}
