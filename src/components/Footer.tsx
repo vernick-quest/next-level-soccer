@@ -34,6 +34,11 @@ export default function Footer() {
               </li>
               <li><Link href="/register" className="hover:text-[#f8c5b1] transition-colors">Register</Link></li>
               <li><Link href="/coaches" className="hover:text-[#f8c5b1] transition-colors">Coach&apos;s View</Link></li>
+              <li>
+                <Link href="/report-card-skills" className="hover:text-[#f8c5b1] transition-colors">
+                  Report card skills
+                </Link>
+              </li>
             </ul>
           </div>
 
