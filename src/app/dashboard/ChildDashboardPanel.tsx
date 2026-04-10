@@ -22,6 +22,8 @@ function weekStatusLabel(status: DashboardWeekStatus): string {
       return 'Registered (payment pending)'
     case 'refund_requested':
       return 'Refund requested'
+    case 'declined':
+      return 'Not confirmed'
     case 'addable':
       return 'Open to register'
     case 'full':
@@ -42,6 +44,8 @@ function weekTileClasses(status: DashboardWeekStatus): string {
       return `${base} border-amber-400 bg-amber-50 text-amber-950`
     case 'refund_requested':
       return `${base} border-violet-400 bg-violet-50 text-violet-950`
+    case 'declined':
+      return `${base} border-rose-400 bg-rose-50 text-rose-950`
     case 'addable':
       return `${base} border-[#f05a28] bg-white text-[#062744] hover:bg-[#fff8f3] shadow-sm`
     case 'full':
@@ -174,6 +178,10 @@ export default function ChildDashboardPanel({
             <span className="inline-block w-3 h-3 rounded-sm bg-violet-400 border border-violet-500" aria-hidden />
             Refund requested
           </span>
+          <span className="inline-flex items-center gap-1.5">
+            <span className="inline-block w-3 h-3 rounded-sm bg-rose-300 border border-rose-500" aria-hidden />
+            Not confirmed
+          </span>
         </div>
         <div className="grid sm:grid-cols-2 gap-3">
           {child.weeks.map((tile) => (
@@ -234,7 +242,9 @@ export default function ChildDashboardPanel({
                           ? 'paid/confirmed'
                           : existing.displayStatus === 'refund_requested'
                             ? 'refund requested'
-                            : 'pending'}
+                            : existing.displayStatus === 'declined'
+                              ? 'not confirmed'
+                              : 'pending'}
                         )
                       </span>
                     )}

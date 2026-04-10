@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
+import GoogleOAuthButton from '@/components/GoogleOAuthButton'
 import ParentEmailAuthPanel from '@/components/ParentEmailAuthPanel'
 
 export default function LoginForm() {
@@ -24,19 +25,22 @@ export default function LoginForm() {
 
   return (
     <div className="max-w-md w-full bg-white border border-[#e8d8ce] rounded-2xl p-8 shadow-sm">
-      <h1 className="text-2xl font-extrabold text-[#062744] mb-1">Returning parent sign-in</h1>
+      <h1 className="text-2xl font-extrabold text-[#062744] mb-1">Parent login</h1>
       <p className="text-slate-600 text-sm mb-6 leading-relaxed">
-        Use the same email you used when you registered. New families should start on{' '}
+        Same sign-in as for returning parents: open your dashboard with Google or email. New families should start on{' '}
         <Link href="/register" className="text-[#f05a28] font-semibold hover:underline">
           Register for camp
         </Link>{' '}
-        — that flow includes creating your account.
+        — that flow creates your account.
       </p>
 
       {authError && (
         <div className="mb-4 rounded-xl px-4 py-3 text-sm bg-red-50 border border-red-200 text-red-800">{authError}</div>
       )}
 
+      <div className="mb-5">
+        <GoogleOAuthButton nextPath={next} />
+      </div>
       <ParentEmailAuthPanel variant="returning" redirectPath={next} />
 
       <p className="mt-8 text-center text-sm text-slate-600">

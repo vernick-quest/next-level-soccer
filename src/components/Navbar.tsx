@@ -73,13 +73,13 @@ export default function Navbar() {
                 </button>
               </div>
             ) : (
-              <div className="flex items-center gap-2 lg:gap-3 ml-auto shrink-0">
+              <div className="flex items-center gap-3 lg:gap-4 ml-auto shrink-0">
                 <Link
-                  href="/login"
+                  href="/login?next=%2Fdashboard"
                   className="text-[#264765] font-semibold hover:text-[#f05a28] transition-colors whitespace-nowrap"
-                  title="For parents who already have an account"
+                  title="Already registered? Sign in to open your parent dashboard"
                 >
-                  Sign in
+                  Login
                 </Link>
                 <Link
                   href="/register"
@@ -136,12 +136,12 @@ export default function Navbar() {
           ) : (
             <div className="flex flex-col gap-2 pt-1">
               <Link
-                href="/login"
+                href="/login?next=%2Fdashboard"
                 className="block text-center py-2 text-[#264765] font-semibold hover:text-[#f05a28]"
-                title="For parents who already have an account"
+                title="Already registered? Sign in to open your parent dashboard"
                 onClick={() => setMenuOpen(false)}
               >
-                Sign in
+                Login
               </Link>
               <Link
                 href="/register"

@@ -24,7 +24,7 @@ export type DashboardCamp = {
   /** Same as `camp_session` in the database. */
   week: string
   registrationStatus: string
-  displayStatus: 'pending' | 'confirmed' | 'refund_requested'
+  displayStatus: 'pending' | 'confirmed' | 'refund_requested' | 'declined'
 }
 
 export type DashboardIncrementalChild = {
@@ -37,7 +37,7 @@ export type DashboardIncrementalChild = {
   existingWeeks: {
     week: string
     registrationId: string
-    displayStatus: 'pending' | 'confirmed' | 'refund_requested'
+    displayStatus: 'pending' | 'confirmed' | 'refund_requested' | 'declined'
   }[]
 }
 
@@ -46,6 +46,7 @@ export type DashboardWeekStatus =
   | 'confirmed'
   | 'pending'
   | 'refund_requested'
+  | 'declined'
   | 'addable'
   | 'full'
   | 'unavailable'
@@ -58,7 +59,7 @@ export type DashboardWeekTile = {
 
 export type DashboardReportSnapshot = {
   id: string
-  scores: Record<ReportMetricKey, number>
+  scores: Partial<Record<ReportMetricKey, number>>
   coachComments: string | null
   dateGenerated: string
 }
@@ -83,6 +84,7 @@ function displayStatusForRegistrationRow(
 ): DashboardIncrementalChild['existingWeeks'][0]['displayStatus'] {
   const refundSet = new Set(refundWeeks ?? [])
   const st = (status ?? 'pending').toLowerCase()
+  if (st === 'declined') return 'declined'
   if (st === 'refund_requested' || (week && refundSet.has(week))) {
     return 'refund_requested'
   }
@@ -160,12 +162,13 @@ type PlayerReportDbRow = {
   camp_session: string | null
   coach_comments: string | null
   date_generated: string
-} & Record<ReportMetricKey, number>
+} & Record<ReportMetricKey, number | null>
 
 function reportRowToSnapshot(row: PlayerReportDbRow): DashboardReportSnapshot {
-  const scores = {} as Record<ReportMetricKey, number>
+  const scores: Partial<Record<ReportMetricKey, number>> = {}
   for (const k of ALL_REPORT_METRIC_KEYS) {
-    scores[k] = row[k] as number
+    const v = row[k]
+    if (typeof v === 'number' && v >= 1 && v <= 5) scores[k] = v
   }
   return {
     id: row.id,
@@ -239,6 +242,7 @@ function weekTilesForIncrementalChild(
       const rid = existing.registrationId ? existing.registrationId : null
       if (ds === 'confirmed') return { week, status: 'confirmed' as const, registrationId: rid }
       if (ds === 'refund_requested') return { week, status: 'refund_requested' as const, registrationId: rid }
+      if (ds === 'declined') return { week, status: 'declined' as const, registrationId: rid }
       return { week, status: 'pending' as const, registrationId: rid }
     }
     if (child.submissionPending && remaining > 0) {
@@ -260,6 +264,9 @@ function weekTilesFromCampsOnly(campsForChild: DashboardCamp[]): DashboardWeekTi
     if (camp.displayStatus === 'confirmed') return { week, status: 'confirmed', registrationId: camp.registrationId }
     if (camp.displayStatus === 'refund_requested') {
       return { week, status: 'refund_requested', registrationId: camp.registrationId }
+    }
+    if (camp.displayStatus === 'declined') {
+      return { week, status: 'declined', registrationId: camp.registrationId }
     }
     return { week, status: 'pending', registrationId: camp.registrationId }
   })

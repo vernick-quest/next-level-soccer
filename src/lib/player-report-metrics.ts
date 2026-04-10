@@ -1,72 +1,76 @@
-/** DB columns: technical_1–4, tactical_1–4, physical_1–4, psychological_1–4 (values 1–5). */
+/**
+ * Coach/parent report metrics: 12 skills aligned with `REPORT_CARD_SKILL_PILLARS_DOC` (report-card-skills page).
+ * DB columns `*_4` are legacy; new saves set them to null.
+ */
+
+import { REPORT_CARD_SKILL_PILLARS_DOC } from '@/lib/report-card-doc-reference'
 
 export type MetricCategory = 'technical' | 'tactical' | 'physical' | 'psychological'
 
-export type ReportMetricKey =
+const PILLAR_CATEGORIES: MetricCategory[] = ['technical', 'tactical', 'physical', 'psychological']
+
+/** Keys coaches and parents see (12), matching the public report card doc. */
+export type CoachReportMetricKey =
   | 'technical_1'
   | 'technical_2'
   | 'technical_3'
-  | 'technical_4'
   | 'tactical_1'
   | 'tactical_2'
   | 'tactical_3'
-  | 'tactical_4'
   | 'physical_1'
   | 'physical_2'
   | 'physical_3'
-  | 'physical_4'
   | 'psychological_1'
   | 'psychological_2'
   | 'psychological_3'
+
+/** All DB columns including legacy fourth metric per category. */
+export type ReportMetricKey =
+  | CoachReportMetricKey
+  | 'technical_4'
+  | 'tactical_4'
+  | 'physical_4'
   | 'psychological_4'
+
+export const COACH_REPORT_METRIC_KEYS: CoachReportMetricKey[] = [
+  'technical_1',
+  'technical_2',
+  'technical_3',
+  'tactical_1',
+  'tactical_2',
+  'tactical_3',
+  'physical_1',
+  'physical_2',
+  'physical_3',
+  'psychological_1',
+  'psychological_2',
+  'psychological_3',
+]
+
+export const LEGACY_ONLY_METRIC_KEYS: ReportMetricKey[] = [
+  'technical_4',
+  'tactical_4',
+  'physical_4',
+  'psychological_4',
+]
+
+export const ALL_REPORT_METRIC_KEYS: ReportMetricKey[] = [...COACH_REPORT_METRIC_KEYS, ...LEGACY_ONLY_METRIC_KEYS]
 
 export const REPORT_METRIC_GROUPS: {
   category: MetricCategory
   title: string
-  metrics: { key: ReportMetricKey; label: string }[]
-}[] = [
-  {
-    category: 'technical',
-    title: 'Technical',
-    metrics: [
-      { key: 'technical_1', label: 'First touch quality' },
-      { key: 'technical_2', label: 'Ball control under pressure' },
-      { key: 'technical_3', label: 'Dribbling / 1v1' },
-      { key: 'technical_4', label: 'Passing range & weight' },
-    ],
-  },
-  {
-    category: 'tactical',
-    title: 'Tactical',
-    metrics: [
-      { key: 'tactical_1', label: 'Positional awareness' },
-      { key: 'tactical_2', label: 'Decision speed' },
-      { key: 'tactical_3', label: 'Defensive shape / pressing' },
-      { key: 'tactical_4', label: 'Game reading / anticipation' },
-    ],
-  },
-  {
-    category: 'physical',
-    title: 'Physical',
-    metrics: [
-      { key: 'physical_1', label: 'Speed / acceleration' },
-      { key: 'physical_2', label: 'Endurance / work rate' },
-      { key: 'physical_3', label: 'Strength / balance' },
-      { key: 'physical_4', label: 'Agility / change of direction' },
-    ],
-  },
-  {
-    category: 'psychological',
-    title: 'Psychological',
-    metrics: [
-      { key: 'psychological_1', label: 'Confidence under pressure' },
-      { key: 'psychological_2', label: 'Communication' },
-      { key: 'psychological_3', label: 'Focus / discipline' },
-      { key: 'psychological_4', label: 'Coachability / attitude' },
-    ],
-  },
-]
-
-export const ALL_REPORT_METRIC_KEYS: ReportMetricKey[] = REPORT_METRIC_GROUPS.flatMap((g) =>
-  g.metrics.map((m) => m.key),
-)
+  subtitle: string
+  metrics: { key: CoachReportMetricKey; label: string; description: string }[]
+}[] = PILLAR_CATEGORIES.map((cat, idx) => {
+  const pillar = REPORT_CARD_SKILL_PILLARS_DOC[idx]
+  return {
+    category: cat,
+    title: pillar.title,
+    subtitle: pillar.subtitle,
+    metrics: pillar.skills.map((s, j) => ({
+      key: `${cat}_${j + 1}` as CoachReportMetricKey,
+      label: s.name,
+      description: s.description,
+    })),
+  }
+})

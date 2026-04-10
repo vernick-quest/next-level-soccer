@@ -4,7 +4,7 @@ export default function CoachesSignIn() {
   return (
     <StaffGoogleSignIn
       nextPath="/coaches"
-      title="Coach's View"
+      title="Coach's Portal"
       description="Sign in with Google using a staff admin account. The site owner adds authorized emails under Admin → Manage staff admins."
       backHref="/"
     />

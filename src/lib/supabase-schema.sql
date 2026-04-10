@@ -250,34 +250,35 @@ begin
   end if;
 end $$;
 
--- Coach player reports (16 metrics × 1–5, linked to registered players)
+-- Coach player reports (16 metric columns; 12 used for parent-facing doc; *_4 legacy/null on new saves)
 create table if not exists player_reports (
   id uuid primary key default gen_random_uuid(),
 
   registration_child_id uuid not null references registration_children (id) on delete cascade,
 
-  technical_1 int not null check (technical_1 between 1 and 5),
-  technical_2 int not null check (technical_2 between 1 and 5),
-  technical_3 int not null check (technical_3 between 1 and 5),
-  technical_4 int not null check (technical_4 between 1 and 5),
+  technical_1 int check (technical_1 is null or (technical_1 between 1 and 5)),
+  technical_2 int check (technical_2 is null or (technical_2 between 1 and 5)),
+  technical_3 int check (technical_3 is null or (technical_3 between 1 and 5)),
+  technical_4 int check (technical_4 is null or (technical_4 between 1 and 5)),
 
-  tactical_1 int not null check (tactical_1 between 1 and 5),
-  tactical_2 int not null check (tactical_2 between 1 and 5),
-  tactical_3 int not null check (tactical_3 between 1 and 5),
-  tactical_4 int not null check (tactical_4 between 1 and 5),
+  tactical_1 int check (tactical_1 is null or (tactical_1 between 1 and 5)),
+  tactical_2 int check (tactical_2 is null or (tactical_2 between 1 and 5)),
+  tactical_3 int check (tactical_3 is null or (tactical_3 between 1 and 5)),
+  tactical_4 int check (tactical_4 is null or (tactical_4 between 1 and 5)),
 
-  physical_1 int not null check (physical_1 between 1 and 5),
-  physical_2 int not null check (physical_2 between 1 and 5),
-  physical_3 int not null check (physical_3 between 1 and 5),
-  physical_4 int not null check (physical_4 between 1 and 5),
+  physical_1 int check (physical_1 is null or (physical_1 between 1 and 5)),
+  physical_2 int check (physical_2 is null or (physical_2 between 1 and 5)),
+  physical_3 int check (physical_3 is null or (physical_3 between 1 and 5)),
+  physical_4 int check (physical_4 is null or (physical_4 between 1 and 5)),
 
-  psychological_1 int not null check (psychological_1 between 1 and 5),
-  psychological_2 int not null check (psychological_2 between 1 and 5),
-  psychological_3 int not null check (psychological_3 between 1 and 5),
-  psychological_4 int not null check (psychological_4 between 1 and 5),
+  psychological_1 int check (psychological_1 is null or (psychological_1 between 1 and 5)),
+  psychological_2 int check (psychological_2 is null or (psychological_2 between 1 and 5)),
+  psychological_3 int check (psychological_3 is null or (psychological_3 between 1 and 5)),
+  psychological_4 int check (psychological_4 is null or (psychological_4 between 1 and 5)),
 
   coach_comments text,
   date_generated timestamptz not null default now(),
+  parent_email_sent_at timestamptz,
 
   created_by uuid references auth.users (id) on delete set null
 );
@@ -287,7 +288,15 @@ create index if not exists player_reports_date_generated_idx on player_reports (
 
 -- Which camp week this report is for (matches registrations.camp_session / CAMP_SESSIONS labels).
 alter table public.player_reports add column if not exists camp_session text;
+alter table public.player_reports add column if not exists parent_email_sent_at timestamptz;
 create index if not exists player_reports_child_camp_idx on public.player_reports (registration_child_id, camp_session);
+
+-- One submitted report per camper per camp week (coach finalizes → parent email).
+create unique index if not exists player_reports_child_camp_unique
+  on public.player_reports (registration_child_id, camp_session)
+  where camp_session is not null;
+
+alter table public.registrations add column if not exists decline_reason text;
 
 alter table player_reports enable row level security;
 
@@ -421,4 +430,32 @@ begin
         lower(trim(email)) = lower(trim(coalesce(auth.jwt() ->> 'email', '')))
       );
   end if;
+end $$;
+
+-- Relax legacy NOT NULL on player_reports metric columns (existing DBs).
+do $$
+declare
+  col text;
+  cols text[] := array[
+    'technical_1','technical_2','technical_3','technical_4',
+    'tactical_1','tactical_2','tactical_3','tactical_4',
+    'physical_1','physical_2','physical_3','physical_4',
+    'psychological_1','psychological_2','psychological_3','psychological_4'
+  ];
+begin
+  foreach col in array cols
+  loop
+    execute format('alter table public.player_reports alter column %I drop not null', col);
+    execute format('alter table public.player_reports drop constraint if exists player_reports_%I_check', col);
+    begin
+      execute format(
+        'alter table public.player_reports add constraint player_reports_%I_check check (%I is null or (%I between 1 and 5))',
+        col,
+        col,
+        col
+      );
+    exception
+      when duplicate_object then null;
+    end;
+  end loop;
 end $$;

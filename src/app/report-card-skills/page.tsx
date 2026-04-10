@@ -2,18 +2,12 @@ import Link from 'next/link'
 import Navbar from '@/components/Navbar'
 import Footer from '@/components/Footer'
 import { REPORT_CARD_RATING_SCALE_DOC, REPORT_CARD_SKILL_PILLARS_DOC } from '@/lib/report-card-doc-reference'
+import { REPORT_CARD_CATEGORY_ACCENT } from '@/lib/report-card-ui'
 
 export const metadata = {
   title: 'Next Level Soccer Report Card | Next Level Soccer SF',
   description:
     'Rating scale (1–5) and skills we assess: Technical, Tactical, Physical, and Psychological.',
-}
-
-const CATEGORY_ACCENT: Record<string, string> = {
-  technical: 'border-l-[#1d4ed8] bg-[#eff6ff]',
-  tactical: 'border-l-[#0d9488] bg-[#f0fdfa]',
-  physical: 'border-l-[#f05a28] bg-[#fff7ed]',
-  psychological: 'border-l-[#7c3aed] bg-[#f5f3ff]',
 }
 
 export default function ReportCardSkillsPage() {
@@ -78,7 +72,7 @@ export default function ReportCardSkillsPage() {
             {REPORT_CARD_SKILL_PILLARS_DOC.map((pillar) => (
               <div
                 key={pillar.id}
-                className={`rounded-2xl border border-[#e8d8ce] shadow-sm overflow-hidden border-l-4 ${CATEGORY_ACCENT[pillar.id] ?? 'border-l-[#062744]'}`}
+                className={`rounded-2xl border border-[#e8d8ce] shadow-sm overflow-hidden border-l-4 ${REPORT_CARD_CATEGORY_ACCENT[pillar.id] ?? 'border-l-[#062744]'}`}
               >
                 <div className="bg-white/90 px-5 py-4 border-b border-[#f0e2d9]">
                   <h3 className="text-xl font-bold text-[#062744]">

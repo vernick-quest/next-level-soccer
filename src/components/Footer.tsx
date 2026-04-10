@@ -27,13 +27,17 @@ export default function Footer() {
             <ul className="space-y-2 text-sm">
               <li><a href="#about" className="hover:text-[#f8c5b1] transition-colors">About</a></li>
               <li><a href="#sessions" className="hover:text-[#f8c5b1] transition-colors">Schedule</a></li>
+              <li><Link href="/register" className="hover:text-[#f8c5b1] transition-colors">Register</Link></li>
               <li>
-                <Link href="/login" className="hover:text-[#f8c5b1] transition-colors" title="Returning parents">
-                  Returning parents
+                <Link
+                  href="/login?next=%2Fdashboard"
+                  className="hover:text-[#f8c5b1] transition-colors"
+                  title="Already registered? Sign in to your dashboard"
+                >
+                  Login
                 </Link>
               </li>
-              <li><Link href="/register" className="hover:text-[#f8c5b1] transition-colors">Register</Link></li>
-              <li><Link href="/coaches" className="hover:text-[#f8c5b1] transition-colors">Coach&apos;s View</Link></li>
+              <li><Link href="/coaches" className="hover:text-[#f8c5b1] transition-colors">Coach&apos;s Portal</Link></li>
               <li>
                 <Link href="/report-card-skills" className="hover:text-[#f8c5b1] transition-colors">
                   Report Card

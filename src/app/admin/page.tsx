@@ -40,7 +40,7 @@ export default async function AdminPage() {
           <h1 className="text-3xl font-extrabold text-[#062744] mb-2">Admin — Registrations</h1>
           <p className="text-slate-600 mb-8 max-w-3xl">
             All camp weeks across every family submission. Sort by column headers. Mark a family as paid to confirm their
-            registration, then send the welcome email. Edit report cards opens the same evaluation form as Coach&apos;s View.
+            registration, then send the welcome email. Edit report cards opens the same evaluation form as Coach&apos;s Portal.
           </p>
           <AdminTable initialRows={result.rows} showStaffLink={showStaffLink} />
         </div>

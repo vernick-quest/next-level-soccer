@@ -47,7 +47,7 @@ export default function StaffEmailsForm({ initialRows }: { initialRows: StaffAdm
   return (
     <div className="max-w-lg">
       <p className="text-slate-600 text-sm mb-6">
-        Listed emails can open <strong className="text-[#062744]">Admin</strong> and <strong className="text-[#062744]">Coach&apos;s View</strong> after signing in with{' '}
+        Listed emails can open <strong className="text-[#062744]">Admin</strong> and <strong className="text-[#062744]">Coach&apos;s Portal</strong> after signing in with{' '}
         <strong className="text-[#062744]">Google</strong> using the same address.
       </p>
 

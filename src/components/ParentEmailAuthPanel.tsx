@@ -135,7 +135,7 @@ export default function ParentEmailAuthPanel({
   return (
     <div className={`rounded-xl border border-[#e8d8ce] bg-[#faf8f5] p-4 sm:p-5 ${className}`}>
       <p className="text-xs font-semibold text-[#213c57] uppercase tracking-wide mb-3">
-        {variant === 'register' ? 'Or use email' : 'Email sign-in'}
+        {variant === 'register' ? 'Or use email' : 'Or use email'}
       </p>
 
       <div className="flex flex-wrap gap-2 mb-4">

@@ -22,7 +22,7 @@ export default function CoachesWrongAccount() {
       <div className="max-w-md w-full bg-white border border-[#e8d8ce] rounded-2xl p-8 shadow-sm text-center">
         <h1 className="text-xl font-extrabold text-[#062744] mb-2">Staff access only</h1>
         <p className="text-slate-600 text-sm mb-6 leading-relaxed">
-          Coach&apos;s View is for camp staff. You&apos;re signed in with an account that isn&apos;t on the staff list, or you
+          Coach&apos;s Portal is for camp staff. You&apos;re signed in with an account that isn&apos;t on the staff list, or you
           didn&apos;t use Google. Sign out and sign in with Google as an authorized admin.
         </p>
         <button

@@ -2,6 +2,7 @@
 
 import { Fragment } from 'react'
 import { REPORT_METRIC_GROUPS } from '@/lib/player-report-metrics'
+import { REPORT_CARD_CATEGORY_ACCENT } from '@/lib/report-card-ui'
 import { CAMP_SESSIONS } from '@/lib/camp-weeks'
 import { weekColumnShortLabel } from '@/lib/camp-display'
 import type { DashboardReportSnapshot } from './actions'
@@ -38,15 +39,23 @@ export default function ReportSkillsGrid({
               <tr className="bg-[#f0e2d9]/80">
                 <td
                   colSpan={columns.length + 1}
-                  className="sticky left-0 z-[1] bg-[#f0e2d9]/95 px-3 py-1.5 text-xs font-bold text-[#062744] border-b border-[#e8d8ce]"
+                  className={`sticky left-0 z-[1] px-3 py-2 border-b border-[#e8d8ce] border-l-4 ${
+                    REPORT_CARD_CATEGORY_ACCENT[group.category] ?? 'bg-[#f0e2d9]/95'
+                  }`}
                 >
-                  {group.title}
+                  <span className="text-sm font-bold text-[#062744]">{group.title}</span>
+                  <span className="text-[#f05a28] font-bold"> ({group.subtitle})</span>
                 </td>
               </tr>
               {group.metrics.map((m) => (
                 <tr key={m.key} className="hover:bg-[#fffaf5]/80">
                   <td className="sticky left-0 z-[1] bg-white border-b border-r border-[#f0e2d9] px-3 py-2 text-slate-700 text-xs leading-snug">
-                    {m.label}
+                    <span className="font-bold text-[#062744]">{m.label}</span>
+                    <span className="text-[#f05a28] font-bold" aria-hidden>
+                      {' '}
+                      *
+                    </span>
+                    <div className="text-slate-600 font-normal mt-0.5">{m.description}</div>
                   </td>
                   {columns.map((col) => {
                     const snap = col === '__legacy__' ? reportsByWeekKey['__legacy__'] : reportsByWeekKey[col]
