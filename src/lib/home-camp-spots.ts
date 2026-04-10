@@ -82,6 +82,7 @@ type RegistrationSpotRow = {
   camp_weeks?: string[] | null
   status: string | null
   refund_requested_weeks: string[] | null
+  organizer_cancelled_at?: string | null
 }
 
 /**
@@ -102,7 +103,7 @@ export async function getWeekSpotUsage(): Promise<WeekSpotUsage | null> {
   let data: RegistrationSpotRow[] | null = null
   let res = await service
     .from('registrations')
-    .select('camp_session, camp_weeks, status, refund_requested_weeks')
+    .select('camp_session, camp_weeks, status, refund_requested_weeks, organizer_cancelled_at')
 
   if (res.error) {
     const retry = await service.from('registrations').select('camp_session, status, refund_requested_weeks')
@@ -118,6 +119,7 @@ export async function getWeekSpotUsage(): Promise<WeekSpotUsage | null> {
   for (const row of data ?? []) {
     const st = (row.status ?? 'pending').toLowerCase()
     if (st !== 'pending' && st !== 'confirmed') continue
+    if (row.organizer_cancelled_at) continue
 
     const refundSet = new Set(row.refund_requested_weeks ?? [])
     const multi = row.camp_weeks

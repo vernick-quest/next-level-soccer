@@ -38,6 +38,8 @@ function weekStatusLabel(status: DashboardWeekStatus): string {
       return 'Refund completed'
     case 'refund_denied':
       return 'Refund not approved'
+    case 'organizer_cancelled':
+      return 'Camp cancelled (low enrollment)'
     case 'addable':
       return 'Available to add'
     case 'full':
@@ -68,6 +70,8 @@ function weekTileClasses(status: DashboardWeekStatus): string {
       return `${base} border-sky-500 bg-sky-50 text-sky-950`
     case 'refund_denied':
       return `${base} border-rose-300 bg-rose-50/90 text-rose-900`
+    case 'organizer_cancelled':
+      return `${base} border-slate-500 bg-slate-100 text-slate-900`
     case 'addable':
       return `${base} border-[#f05a28] bg-white text-[#062744] hover:bg-[#fff8f3] shadow-sm`
     case 'full':
@@ -112,6 +116,23 @@ function weekStatusFootnote(tile: DashboardWeekTile, camps: DashboardCamp[]) {
       <p className="text-[10px] text-rose-900 mt-1.5 leading-snug">
         <span className="font-semibold">Reason: </span>
         {camp.refundDenialReason}
+      </p>
+    )
+  }
+  if (tile.status === 'organizer_cancelled' && camp.organizerCancelledAt) {
+    if (camp.refundMoneySentAt) {
+      return (
+        <p className="text-[10px] text-slate-800 mt-1.5 leading-snug">
+          <span className="font-semibold">Staff cancelled this week</span> (not a parent refund request). Minimum
+          enrollment was not met. Your payment refund is recorded as sent{' '}
+          {formatDashboardTimestamp(camp.refundMoneySentAt)}.
+        </p>
+      )
+    }
+    return (
+      <p className="text-[10px] text-slate-800 mt-1.5 leading-snug">
+        <span className="font-semibold">Staff cancelled this week</span> (not a parent refund request). Minimum
+        enrollment was not met. No payment had been finalized for this week.
       </p>
     )
   }
@@ -244,6 +265,10 @@ export default function ChildDashboardPanel({
           <span className="inline-flex items-center gap-1.5">
             <span className="inline-block w-3 h-3 rounded-sm bg-rose-200 border border-rose-400" aria-hidden />
             Refund not approved
+          </span>
+          <span className="inline-flex items-center gap-1.5">
+            <span className="inline-block w-3 h-3 rounded-sm bg-slate-500 border border-slate-700" aria-hidden />
+            Camp cancelled (staff / low enrollment)
           </span>
           <span className="inline-flex items-center gap-1.5">
             <span className="inline-block w-3 h-3 rounded-sm bg-teal-500 border border-teal-600" aria-hidden />

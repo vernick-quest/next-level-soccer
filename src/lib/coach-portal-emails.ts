@@ -50,6 +50,35 @@ export function htmlRegistrationDeclined(params: {
   </div>`
 }
 
+export function htmlOrganizerCampCancelled(params: {
+  parentFirstName: string
+  playerName: string
+  campWeekLabel: string
+  /** When true, payment had been received — copy references automatic refund. */
+  wasPaidConfirmed: boolean
+}) {
+  const { parentFirstName, playerName, campWeekLabel, wasPaidConfirmed } = params
+  const refundBit = wasPaidConfirmed
+    ? `<p>Because you had already paid for this week, we are <strong>processing your refund automatically</strong>. You do not need to submit a refund request in the parent dashboard — this cancellation was initiated by our staff due to low enrollment, not by you.</p>
+       <p>You will see this week marked as cancelled with the refund noted there once processing completes.</p>`
+    : `<p>No payment was required for this week yet, so there is nothing to refund. This cancellation was initiated by our staff (low enrollment), not from your account.</p>`
+
+  return `
+  <div style="font-family: system-ui, sans-serif; max-width: 560px; line-height: 1.55; color: #1e293b;">
+    <h1 style="color: #062744; font-size: 22px;">Camp week cancelled</h1>
+    <p>Hi ${escapeHtml(parentFirstName)},</p>
+    <p>
+      Unfortunately, <strong>${escapeHtml(campWeekLabel)}</strong> will not run — we did not reach the minimum number of registered players for that week.
+    </p>
+    <p>
+      <strong>${escapeHtml(playerName)}</strong> is no longer scheduled for this week.
+    </p>
+    ${refundBit}
+    <p>We’re sorry for the inconvenience. You can register for another week on our website when it works for your family. Questions? Reply to this email.</p>
+    <p style="margin-top: 2rem; color: #64748b; font-size: 14px;">— Next Level Soccer SF</p>
+  </div>`
+}
+
 export function htmlRefundApproved(params: {
   parentFirstName: string
   playerName: string

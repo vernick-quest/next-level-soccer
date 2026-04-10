@@ -3,6 +3,7 @@
 import { Resend } from 'resend'
 import { getStaffAdminUser } from '@/lib/admin'
 import {
+  htmlOrganizerCampCancelled,
   htmlParentWeeklyReport,
   htmlRefundApproved,
   htmlRefundDeclined,
@@ -22,6 +23,8 @@ import { createClient } from '@/lib/supabase/server'
 import { createServiceRoleClient } from '@/lib/supabase/service'
 
 const KNOWN_CAMP_WEEKS = new Set<string>(CAMP_SESSIONS)
+
+const ORGANIZER_CANCEL_DECLINE_REASON = 'Camp week cancelled — minimum enrollment not met.'
 
 export type CoachPlayerRow = {
   id: string
@@ -48,6 +51,7 @@ export type CoachRegistrationRow = {
   camp_completed_at: string | null
   refund_approved_at: string | null
   refund_money_sent_at: string | null
+  organizer_cancelled_at: string | null
   player_first_name: string | null
   player_last_name: string | null
   parent_first_name: string | null
@@ -151,6 +155,7 @@ export async function listCoachRegistrations(): Promise<{
       camp_completed_at,
       refund_approved_at,
       refund_money_sent_at,
+      organizer_cancelled_at,
       player_first_name,
       player_last_name,
       parent_first_name,
@@ -177,6 +182,7 @@ export async function listCoachRegistrations(): Promise<{
     camp_completed_at: (r as { camp_completed_at?: string | null }).camp_completed_at ?? null,
     refund_approved_at: (r as { refund_approved_at?: string | null }).refund_approved_at ?? null,
     refund_money_sent_at: (r as { refund_money_sent_at?: string | null }).refund_money_sent_at ?? null,
+    organizer_cancelled_at: (r as { organizer_cancelled_at?: string | null }).organizer_cancelled_at ?? null,
     player_first_name: r.player_first_name,
     player_last_name: r.player_last_name,
     parent_first_name: r.parent_first_name,
@@ -210,6 +216,7 @@ export async function listCoachWeekReportRows(campSession: string): Promise<{
     )
     .eq('camp_session', campSession)
     .eq('status', 'confirmed')
+    .is('organizer_cancelled_at', null)
 
   if (regErr) {
     console.error('listCoachWeekReportRows registrations:', regErr)
@@ -416,13 +423,17 @@ export async function resolveRefundRequest(input: {
   const { data: row, error: fetchErr } = await service
     .from('registrations')
     .select(
-      'id, parent_email, parent_first_name, player_first_name, player_last_name, camp_session, status, refund_requested_weeks',
+      'id, parent_email, parent_first_name, player_first_name, player_last_name, camp_session, status, refund_requested_weeks, organizer_cancelled_at',
     )
     .eq('id', input.registrationId)
     .single()
 
   if (fetchErr || !row) {
     return { success: false, error: 'Registration not found.' }
+  }
+
+  if ((row as { organizer_cancelled_at?: string | null }).organizer_cancelled_at) {
+    return { success: false, error: 'This week was cancelled by the camp; refund is handled automatically.' }
   }
 
   if ((row.status ?? '').toLowerCase() !== 'confirmed') {
@@ -521,12 +532,15 @@ export async function markCampWeekCompleted(input: { registrationId: string }): 
   const { data: row, error: fetchErr } = await service
     .from('registrations')
     .select(
-      'id, status, camp_session, refund_requested_weeks, camp_completed_at, refund_approved_at, refund_money_sent_at',
+      'id, status, camp_session, refund_requested_weeks, camp_completed_at, refund_approved_at, refund_money_sent_at, organizer_cancelled_at',
     )
     .eq('id', input.registrationId)
     .single()
 
   if (fetchErr || !row) return { success: false, error: 'Registration not found.' }
+  if ((row as { organizer_cancelled_at?: string | null }).organizer_cancelled_at) {
+    return { success: false, error: 'This week was cancelled by the camp and cannot be marked complete.' }
+  }
   if ((row.status ?? '').toLowerCase() !== 'confirmed') {
     return { success: false, error: 'Only confirmed registrations can be marked complete.' }
   }
@@ -580,12 +594,15 @@ export async function markRefundMoneySent(input: { registrationId: string }): Pr
   const { data: row, error: fetchErr } = await service
     .from('registrations')
     .select(
-      'id, parent_email, parent_first_name, player_first_name, player_last_name, camp_session, status, refund_approved_at, refund_money_sent_at',
+      'id, parent_email, parent_first_name, player_first_name, player_last_name, camp_session, status, refund_approved_at, refund_money_sent_at, organizer_cancelled_at',
     )
     .eq('id', input.registrationId)
     .single()
 
   if (fetchErr || !row) return { success: false, error: 'Registration not found.' }
+  if ((row as { organizer_cancelled_at?: string | null }).organizer_cancelled_at) {
+    return { success: false, error: 'This registration was cancelled by the camp.' }
+  }
   if ((row.status ?? '').toLowerCase() !== 'confirmed') {
     return { success: false, error: 'Invalid registration status.' }
   }
@@ -632,6 +649,110 @@ export async function markRefundMoneySent(input: { registrationId: string }): Pr
   }
 
   return { success: true }
+}
+
+export type CancelCampWeekResult =
+  | { success: true; affected: number }
+  | { success: false; error: string }
+
+/** Cancel an entire camp week (low enrollment): declines pending rows, refunds confirmed (recorded as sent), emails parents. */
+export async function cancelCampWeekLowEnrollment(input: {
+  campSession: string
+}): Promise<CancelCampWeekResult> {
+  const staffUser = await getStaffAdminUser()
+  if (!staffUser) return { success: false, error: 'You must be signed in as staff.' }
+
+  const week = trimName(input.campSession)
+  if (!week || !KNOWN_CAMP_WEEKS.has(week)) {
+    return { success: false, error: 'Select a valid camp week.' }
+  }
+
+  let service: ReturnType<typeof createServiceRoleClient>
+  try {
+    service = createServiceRoleClient()
+  } catch {
+    return { success: false, error: 'Server configuration is incomplete.' }
+  }
+
+  const { data: rows, error: fetchErr } = await service
+    .from('registrations')
+    .select(
+      'id, status, parent_email, parent_first_name, player_first_name, player_last_name, camp_session, organizer_cancelled_at',
+    )
+    .eq('camp_session', week)
+
+  if (fetchErr) {
+    console.error('cancelCampWeekLowEnrollment fetch:', fetchErr)
+    return { success: false, error: 'Could not load registrations.' }
+  }
+
+  const toProcess = (rows ?? []).filter((r) => {
+    if ((r as { organizer_cancelled_at?: string | null }).organizer_cancelled_at) return false
+    const st = (r.status ?? '').toLowerCase()
+    return st === 'pending' || st === 'confirmed'
+  })
+
+  if (toProcess.length === 0) {
+    return { success: false, error: 'No pending or confirmed registrations left to cancel for that week.' }
+  }
+
+  const apiKey = process.env.RESEND_API_KEY
+  const resend = apiKey ? new Resend(apiKey) : null
+  const now = new Date().toISOString()
+
+  for (const r of toProcess) {
+    const st = (r.status ?? '').toLowerCase()
+    const wasPaidConfirmed = st === 'confirmed'
+    const up = wasPaidConfirmed
+      ? {
+          organizer_cancelled_at: now,
+          refund_money_sent_at: now,
+          refund_requested_weeks: [] as string[],
+          refund_approved_at: null as string | null,
+          refund_denial_reason: null as string | null,
+        }
+      : {
+          status: 'declined' as const,
+          decline_reason: ORGANIZER_CANCEL_DECLINE_REASON,
+          organizer_cancelled_at: now,
+        }
+
+    const { error: upErr } = await service.from('registrations').update(up).eq('id', r.id)
+    if (upErr) {
+      console.error('cancelCampWeekLowEnrollment update:', upErr)
+      return { success: false, error: 'Could not update all registrations. Try again or fix in Supabase.' }
+    }
+
+    const parentEmail = ((r as { parent_email?: string | null }).parent_email ?? '').trim()
+    const parentFirst = ((r as { parent_first_name?: string | null }).parent_first_name ?? '').trim() || 'there'
+    const playerName = `${(r as { player_first_name?: string | null }).player_first_name ?? ''} ${(r as { player_last_name?: string | null }).player_last_name ?? ''}`.trim()
+    const weekLabel = campNameFromWeekLabel(week)
+
+    if (resend && parentEmail) {
+      const html = htmlOrganizerCampCancelled({
+        parentFirstName: parentFirst,
+        playerName,
+        campWeekLabel: weekLabel,
+        wasPaidConfirmed,
+      })
+      const { error: sendErr } = await resend.emails.send({
+        from: SENDER_EMAIL,
+        replyTo: REPLY_TO_EMAIL,
+        to: parentEmail,
+        subject: `Camp week cancelled — ${weekLabel} — Next Level Soccer SF`,
+        html,
+      })
+      if (sendErr) console.error('cancelCampWeekLowEnrollment email:', sendErr)
+    } else if (!parentEmail) {
+      console.warn('cancelCampWeekLowEnrollment: missing parent email for row', r.id)
+    }
+  }
+
+  if (!apiKey) {
+    console.warn('cancelCampWeekLowEnrollment: RESEND_API_KEY missing; parents not emailed.')
+  }
+
+  return { success: true, affected: toProcess.length }
 }
 
 export type SaveReportResult = { success: true } | { success: false; error: string }
@@ -686,7 +807,7 @@ export async function savePlayerReport(payload: {
 
   const { data: regRow, error: regErr } = await service
     .from('registrations')
-    .select('id, parent_email, parent_first_name, camp_session, status')
+    .select('id, parent_email, parent_first_name, camp_session, status, organizer_cancelled_at')
     .eq('registration_submission_id', regChild.submission_id)
     .eq('camp_session', payload.campSession.trim())
     .eq('player_first_name', trimName(regChild.player_first_name))
@@ -695,6 +816,9 @@ export async function savePlayerReport(payload: {
 
   if (regErr || !regRow) {
     return { success: false, error: 'No confirmed camp registration found for this player and week.' }
+  }
+  if ((regRow as { organizer_cancelled_at?: string | null }).organizer_cancelled_at) {
+    return { success: false, error: 'This week was cancelled by the camp; report cards are not filed for it.' }
   }
   if ((regRow.status ?? '').toLowerCase() !== 'confirmed') {
     return { success: false, error: 'Reports can only be submitted for confirmed camp weeks.' }

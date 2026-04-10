@@ -14,6 +14,7 @@ import {
 import { registrationRefundPending } from '@/lib/registration-refund-pending'
 import { REPORT_CARD_CATEGORY_ACCENT } from '@/lib/report-card-ui'
 import {
+  cancelCampWeekLowEnrollment,
   listCoachRegistrations,
   listCoachWeekReportRows,
   markCampWeekCompleted,
@@ -66,6 +67,7 @@ export default function CoachPortal({
   const [declineReasons, setDeclineReasons] = useState<Record<string, string>>({})
   const [refundDeclineReasons, setRefundDeclineReasons] = useState<Record<string, string>>({})
   const [sortRegistrationsBy, setSortRegistrationsBy] = useState<'date' | 'child'>('date')
+  const [cancelWeekSession, setCancelWeekSession] = useState<string>(CAMP_SESSIONS[0] ?? '')
   const [message, setMessage] = useState<{ type: 'ok' | 'err'; text: string } | null>(null)
   const [isPending, startTransition] = useTransition()
 
@@ -239,6 +241,33 @@ export default function CoachPortal({
     })
   }
 
+  function submitCancelEntireWeek() {
+    if (
+      !confirm(
+        `Cancel the entire week "${campNameFromWeekLabel(cancelWeekSession)}" for low enrollment?\n\n` +
+          '• Pending registrations will be declined.\n' +
+          '• Paid (confirmed) registrations will be marked cancelled with automatic refund recorded and parents emailed.\n' +
+          'This cannot be undone from the portal.',
+      )
+    ) {
+      return
+    }
+    setMessage(null)
+    startTransition(async () => {
+      const r = await cancelCampWeekLowEnrollment({ campSession: cancelWeekSession })
+      if (!r.success) {
+        setMessage({ type: 'err', text: r.error })
+        return
+      }
+      setMessage({
+        type: 'ok',
+        text: `Week cancelled. Updated ${r.affected} registration(s) and emailed parents.`,
+      })
+      await refreshRegistrations()
+      await refreshWeekPlayers(campSession)
+    })
+  }
+
   function submitReport(childId: string) {
     setMessage(null)
     const scores = scoresFromRecord(scoresFor(childId))
@@ -352,6 +381,38 @@ export default function CoachPortal({
 
         {tab === 'registrations' && (
           <section className="space-y-4">
+            <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 sm:p-5">
+              <h2 className="text-sm font-bold text-[#062744] mb-2">Cancel entire camp week (low enrollment)</h2>
+              <p className="text-xs text-slate-700 mb-3">
+                If a week does not meet the minimum player count, cancel it here. Parents see <strong>staff cancelled</strong>{' '}
+                (not a refund request they made). Paid families get an automatic refund record and email; pending
+                registrations are declined.
+              </p>
+              <div className="flex flex-col sm:flex-row sm:flex-wrap sm:items-end gap-3">
+                <label className="block text-sm">
+                  <span className="block font-semibold text-[#213c57] mb-1">Week</span>
+                  <select
+                    value={cancelWeekSession}
+                    onChange={(e) => setCancelWeekSession(e.target.value)}
+                    className="w-full sm:w-64 border border-[#e8d8ce] rounded-xl px-3 py-2 text-sm bg-white"
+                  >
+                    {CAMP_SESSIONS.map((w) => (
+                      <option key={w} value={w}>
+                        {campNameFromWeekLabel(w)}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <button
+                  type="button"
+                  disabled={isPending}
+                  onClick={() => submitCancelEntireWeek()}
+                  className="shrink-0 text-sm font-bold bg-slate-700 hover:bg-slate-800 text-white px-4 py-2.5 rounded-full disabled:opacity-50"
+                >
+                  Cancel this week for all families
+                </button>
+              </div>
+            </div>
             <p className="text-sm text-slate-600">
               Confirm after payment is received. Mark confirmed weeks <strong>complete</strong> after camp ends (parents
               can no longer request refunds). For refunds: approve or decline with a reason; after you approve, use{' '}
@@ -393,6 +454,7 @@ export default function CoachPortal({
                   {sortedRegistrations.map((row) => {
                     const st = (row.status ?? 'pending').toLowerCase()
                     const rowPending = st === 'pending'
+                    const organizerCancelled = !!row.organizer_cancelled_at
                     const refundPending = registrationRefundPending(row)
                     const refundAwaitingPayout =
                       st === 'confirmed' &&
@@ -400,19 +462,25 @@ export default function CoachPortal({
                       !row.refund_money_sent_at &&
                       !refundPending
                     const completed = !!row.camp_completed_at
-                    const statusLabel = completed
-                      ? 'camp complete'
-                      : row.refund_money_sent_at
-                        ? 'refund completed'
-                        : refundPending
-                          ? 'refund requested'
-                          : refundAwaitingPayout
-                            ? 'refund processing'
-                            : row.refund_denial_reason?.trim()
-                              ? 'refund denied'
-                              : st
+                    const statusLabel = organizerCancelled
+                      ? 'camp cancelled (staff)'
+                      : completed
+                        ? 'camp complete'
+                        : row.refund_money_sent_at
+                          ? 'refund completed'
+                          : refundPending
+                            ? 'refund requested'
+                            : refundAwaitingPayout
+                              ? 'refund processing'
+                              : row.refund_denial_reason?.trim()
+                                ? 'refund denied'
+                                : st
                     const showMarkComplete =
-                      st === 'confirmed' && !completed && !refundPending && !refundAwaitingPayout
+                      st === 'confirmed' &&
+                      !completed &&
+                      !organizerCancelled &&
+                      !refundPending &&
+                      !refundAwaitingPayout
                     return (
                       <div
                         key={row.id}
@@ -454,25 +522,36 @@ export default function CoachPortal({
                           <div className="flex flex-col items-end gap-2 w-full sm:w-auto">
                             <span
                               className={`text-xs font-bold uppercase px-3 py-1 rounded-full ${
-                                completed
-                                  ? 'bg-teal-100 text-teal-900'
-                                  : row.refund_money_sent_at
-                                    ? 'bg-sky-100 text-sky-900'
-                                    : refundPending
-                                      ? 'bg-violet-100 text-violet-900'
-                                      : refundAwaitingPayout
-                                        ? 'bg-amber-100 text-amber-900'
-                                        : row.refund_denial_reason?.trim()
-                                          ? 'bg-rose-100 text-rose-900'
-                                          : st === 'confirmed'
-                                            ? 'bg-emerald-100 text-emerald-900'
-                                            : st === 'declined'
-                                              ? 'bg-rose-100 text-rose-900'
-                                              : 'bg-amber-100 text-amber-900'
+                                organizerCancelled
+                                  ? 'bg-slate-200 text-slate-900'
+                                  : completed
+                                    ? 'bg-teal-100 text-teal-900'
+                                    : row.refund_money_sent_at
+                                      ? 'bg-sky-100 text-sky-900'
+                                      : refundPending
+                                        ? 'bg-violet-100 text-violet-900'
+                                        : refundAwaitingPayout
+                                          ? 'bg-amber-100 text-amber-900'
+                                          : row.refund_denial_reason?.trim()
+                                            ? 'bg-rose-100 text-rose-900'
+                                            : st === 'confirmed'
+                                              ? 'bg-emerald-100 text-emerald-900'
+                                              : st === 'declined'
+                                                ? 'bg-rose-100 text-rose-900'
+                                                : 'bg-amber-100 text-amber-900'
                               }`}
                             >
                               {statusLabel}
                             </span>
+                            {organizerCancelled ? (
+                              <p className="mt-2 text-xs text-slate-700 w-full text-left sm:text-right max-w-md">
+                                Week cancelled by staff (low enrollment). Parent dashboard shows this was{' '}
+                                <strong>not</strong> a refund request they submitted.
+                                {row.refund_money_sent_at
+                                  ? ` Refund recorded ${formatRegistrationDate(row.refund_money_sent_at)}.`
+                                  : null}
+                              </p>
+                            ) : null}
                             {rowPending && (
                               <div className="w-full sm:max-w-md mt-1 flex flex-col items-end gap-3">
                                 <div className="flex flex-wrap gap-2 justify-end">

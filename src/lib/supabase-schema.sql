@@ -301,6 +301,7 @@ alter table public.registrations add column if not exists refund_denial_reason t
 alter table public.registrations add column if not exists camp_completed_at timestamptz;
 alter table public.registrations add column if not exists refund_approved_at timestamptz;
 alter table public.registrations add column if not exists refund_money_sent_at timestamptz;
+alter table public.registrations add column if not exists organizer_cancelled_at timestamptz;
 
 alter table player_reports enable row level security;
 
