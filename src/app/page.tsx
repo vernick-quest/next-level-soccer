@@ -2,7 +2,6 @@ import Link from 'next/link'
 import Image from 'next/image'
 import Navbar from '@/components/Navbar'
 import Footer from '@/components/Footer'
-import { REPORT_CARD_SKILL_PILLARS_DOC } from '@/lib/report-card-doc-reference'
 import { REPORT_CARD_CATEGORY_ACCENT } from '@/lib/report-card-ui'
 import { CAMP_SESSIONS } from '@/lib/camp-weeks'
 import { getWeekSpotUsage, WEEK_PLAYER_CAPACITY } from '@/lib/home-camp-spots'
@@ -18,6 +17,33 @@ const sessions = CAMP_SESSIONS.map((weekKey) => ({
 }))
 
 const MIN_WEEK_PLAYERS = 10
+
+const homeDevelopmentPillars = [
+  {
+    id: 'technical',
+    title: 'Technical',
+    subtitle: 'The "Ball Master"',
+    tagline: 'Master the Ball, Own the Game.',
+  },
+  {
+    id: 'tactical',
+    title: 'Tactical',
+    subtitle: 'The "Soccer IQ"',
+    tagline: 'Play Smarter, Move Faster.',
+  },
+  {
+    id: 'physical',
+    title: 'Physical',
+    subtitle: 'The "Athlete"',
+    tagline: 'Explosive Power, Elite Agility.',
+  },
+  {
+    id: 'psychological',
+    title: 'Psychological',
+    subtitle: 'The "Competitor"',
+    tagline: 'Strong Mind, Winning Spirit.',
+  },
+] as const
 
 const coaches = [
   {
@@ -130,7 +156,7 @@ export default async function HomePage() {
         </div>
       </section>
 
-      {/* Player development — same four pillars & copy as /report-card-skills */}
+      {/* Player development — pillar headlines; full rubric on /report-card-skills */}
       <section id="player-development" className="bg-[#f05a28] py-8 sm:py-10 lg:py-12 scroll-mt-20">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
           <p className="text-center text-white font-bold text-base sm:text-lg lg:text-xl max-w-3xl mx-auto mb-2 leading-relaxed px-1">
@@ -144,30 +170,20 @@ export default async function HomePage() {
             — rating scale and the twelve skills we assess.
           </p>
           <ul className="grid sm:grid-cols-2 gap-4 sm:gap-5 max-w-5xl mx-auto list-none p-0 m-0">
-            {REPORT_CARD_SKILL_PILLARS_DOC.map((pillar) => (
+            {homeDevelopmentPillars.map((pillar) => (
               <li key={pillar.id}>
                 <div
-                  className={`rounded-2xl border border-[#e8d8ce] shadow-sm overflow-hidden border-l-4 h-full ${REPORT_CARD_CATEGORY_ACCENT[pillar.id] ?? 'border-l-[#062744]'}`}
+                  className={`rounded-2xl border border-[#e8d8ce] shadow-sm overflow-hidden border-l-4 h-full flex flex-col ${REPORT_CARD_CATEGORY_ACCENT[pillar.id] ?? 'border-l-[#062744]'}`}
                 >
-                  <div className="bg-white/90 px-4 sm:px-5 py-3 sm:py-4 border-b border-[#f0e2d9]">
-                    <h3 className="text-xl font-bold text-[#062744] text-left">
-                      {pillar.title}{' '}
-                      <span className="text-[#f05a28] font-bold">({pillar.subtitle})</span>
+                  <div className="bg-white/90 px-4 sm:px-5 py-4 sm:py-5 border-b border-[#f0e2d9] text-left">
+                    <h3 className="text-xl sm:text-2xl font-bold text-[#062744] leading-snug">
+                      <span className="text-[#062744]">{pillar.title}:</span>{' '}
+                      <span className="text-[#f05a28]">{pillar.subtitle}</span>
                     </h3>
                   </div>
-                  <ul className="px-4 sm:px-5 py-3 sm:py-4 space-y-3 sm:space-y-4 text-sm text-slate-800 bg-white list-none m-0 text-left">
-                    {pillar.skills.map((s) => (
-                      <li key={s.name} className="flex gap-2 sm:gap-3">
-                        <span className="text-[#f05a28] font-bold mt-0.5 shrink-0" aria-hidden>
-                          *
-                        </span>
-                        <div>
-                          <span className="font-bold text-[#062744]">{s.name}:</span>{' '}
-                          <span className="text-slate-700">{s.description}</span>
-                        </div>
-                      </li>
-                    ))}
-                  </ul>
+                  <p className="px-4 sm:px-5 py-4 sm:py-5 text-base sm:text-lg font-semibold text-[#062744] bg-white leading-snug m-0 flex-1">
+                    {pillar.tagline}
+                  </p>
                 </div>
               </li>
             ))}
