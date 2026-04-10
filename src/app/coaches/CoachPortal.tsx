@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useMemo, useState, useTransition } from 'react'
+import { useCallback, useEffect, useMemo, useState, useTransition } from 'react'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
 import { CAMP_SESSIONS } from '@/lib/camp-weeks'
@@ -14,6 +14,13 @@ import {
 import { registrationRefundPending } from '@/lib/registration-refund-pending'
 import { REPORT_CARD_CATEGORY_ACCENT } from '@/lib/report-card-ui'
 import {
+  EMAIL_TEMPLATE_DEFAULTS,
+  EMAIL_TEMPLATE_KEY_ORDER,
+  EMAIL_TEMPLATE_SPECS,
+  type EmailTemplateKey,
+} from '@/lib/email-template-catalog'
+import type { EmailTemplateBundle } from '@/lib/email-templates-resolve'
+import {
   cancelCampWeekLowEnrollment,
   listCoachRegistrations,
   listCoachWeekReportRows,
@@ -25,6 +32,7 @@ import {
   type CoachRegistrationRow,
   type CoachWeekPlayerRow,
 } from './actions'
+import { resetEmailTemplateOverride, saveEmailTemplateOverride } from './email-template-actions'
 
 function emptyScores(): Record<CoachReportMetricKey, '' | number> {
   return Object.fromEntries(COACH_REPORT_METRIC_KEYS.map((k) => [k, '' as const])) as Record<
@@ -50,14 +58,23 @@ function formatRegistrationDate(iso: string) {
   return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
 }
 
+function formatTemplateUpdatedAt(iso: string | null) {
+  if (!iso) return 'Using site defaults only (nothing saved to the database yet).'
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return `Last saved: ${iso}`
+  return `Last saved: ${d.toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' })}`
+}
+
 export default function CoachPortal({
   initialRegistrations,
   initialWeekPlayers,
+  initialEmailTemplateBundle,
 }: {
   initialRegistrations: CoachRegistrationRow[]
   initialWeekPlayers: Record<string, CoachWeekPlayerRow[]>
+  initialEmailTemplateBundle: EmailTemplateBundle
 }) {
-  const [tab, setTab] = useState<'registrations' | 'reports'>('registrations')
+  const [tab, setTab] = useState<'registrations' | 'reports' | 'emails'>('registrations')
   const [registrations, setRegistrations] = useState(initialRegistrations)
   const [weekPlayersMap, setWeekPlayersMap] = useState(initialWeekPlayers)
   const [campSession, setCampSession] = useState<string>(CAMP_SESSIONS[0] ?? '')
@@ -70,6 +87,16 @@ export default function CoachPortal({
   const [cancelWeekSession, setCancelWeekSession] = useState<string>(CAMP_SESSIONS[0] ?? '')
   const [message, setMessage] = useState<{ type: 'ok' | 'err'; text: string } | null>(null)
   const [isPending, startTransition] = useTransition()
+
+  const [emailBundle, setEmailBundle] = useState(initialEmailTemplateBundle)
+  const [emailTemplateKey, setEmailTemplateKey] = useState<EmailTemplateKey>(EMAIL_TEMPLATE_KEY_ORDER[0])
+  const [emailFieldsDraft, setEmailFieldsDraft] = useState<Record<string, string>>(
+    () => ({ ...initialEmailTemplateBundle[EMAIL_TEMPLATE_KEY_ORDER[0]].fields }),
+  )
+
+  useEffect(() => {
+    setEmailFieldsDraft({ ...emailBundle[emailTemplateKey].fields })
+  }, [emailTemplateKey, emailBundle])
 
   const playersForWeek = weekPlayersMap[campSession] ?? []
 
@@ -117,6 +144,50 @@ export default function CoachPortal({
     const supabase = createClient()
     await supabase.auth.signOut()
     window.location.href = '/coaches'
+  }
+
+  function submitEmailTemplateSave() {
+    setMessage(null)
+    startTransition(async () => {
+      const r = await saveEmailTemplateOverride({
+        templateKey: emailTemplateKey,
+        fields: emailFieldsDraft,
+      })
+      if (!r.success) {
+        setMessage({ type: 'err', text: r.error })
+        return
+      }
+      setEmailBundle((b) => ({
+        ...b,
+        [emailTemplateKey]: { fields: r.fields, updatedAt: r.updatedAt },
+      }))
+      setMessage({ type: 'ok', text: 'Email copy saved. New sends will use this text.' })
+    })
+  }
+
+  function submitEmailTemplateReset() {
+    if (
+      !confirm(
+        'Reset this email to the built-in defaults? This removes your saved copy from the database for this template.',
+      )
+    ) {
+      return
+    }
+    setMessage(null)
+    startTransition(async () => {
+      const r = await resetEmailTemplateOverride({ templateKey: emailTemplateKey })
+      if (!r.success) {
+        setMessage({ type: 'err', text: r.error })
+        return
+      }
+      const defaults = { ...EMAIL_TEMPLATE_DEFAULTS[emailTemplateKey] }
+      setEmailBundle((b) => ({
+        ...b,
+        [emailTemplateKey]: { fields: defaults, updatedAt: null },
+      }))
+      setEmailFieldsDraft(defaults)
+      setMessage({ type: 'ok', text: 'Reset to defaults.' })
+    })
   }
 
   async function refreshWeekPlayers(week: string) {
@@ -365,6 +436,15 @@ export default function CoachPortal({
           >
             Weekly report cards
           </button>
+          <button
+            type="button"
+            onClick={() => setTab('emails')}
+            className={`flex-1 sm:flex-none px-4 py-2.5 rounded-xl text-sm font-bold transition-colors ${
+              tab === 'emails' ? 'bg-[#062744] text-white' : 'text-[#213c57] hover:bg-[#f7f2e8]'
+            }`}
+          >
+            Email copy
+          </button>
         </div>
 
         {message && (
@@ -377,6 +457,84 @@ export default function CoachPortal({
           >
             {message.text}
           </div>
+        )}
+
+        {tab === 'emails' && (
+          <section className="space-y-5 bg-white border border-[#e8d8ce] rounded-2xl p-5 sm:p-6">
+            <div>
+              <h2 className="text-lg font-bold text-[#062744]">Parent email templates</h2>
+              <p className="text-sm text-slate-600 mt-1">
+                Edit structured fields (plain text). Use placeholders like{' '}
+                <code className="text-xs bg-slate-100 px-1 rounded">{'{{playerName}}'}</code>,{' '}
+                <code className="text-xs bg-slate-100 px-1 rounded">{'{{campWeekLabel}}'}</code>,{' '}
+                <code className="text-xs bg-slate-100 px-1 rounded">{'{{parentFullName}}'}</code>, etc. Staff reasons
+                for declines/refunds are still entered per case and are not part of this form. Report card rating tables
+                are fixed; only the surrounding wording is editable here.
+              </p>
+            </div>
+            <label className="block text-sm max-w-xl">
+              <span className="block font-semibold text-[#213c57] mb-1">Which email</span>
+              <select
+                value={emailTemplateKey}
+                onChange={(e) => setEmailTemplateKey(e.target.value as EmailTemplateKey)}
+                className="w-full border border-[#e8d8ce] rounded-xl px-3 py-2 text-sm bg-white"
+              >
+                {EMAIL_TEMPLATE_KEY_ORDER.map((k) => (
+                  <option key={k} value={k}>
+                    {EMAIL_TEMPLATE_SPECS[k].label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <p className="text-xs text-slate-600">{EMAIL_TEMPLATE_SPECS[emailTemplateKey].description}</p>
+            <p className="text-xs text-slate-500">
+              <span className="font-semibold text-slate-600">Placeholders: </span>
+              {EMAIL_TEMPLATE_SPECS[emailTemplateKey].placeholders}
+            </p>
+            <p className="text-xs text-slate-600">{formatTemplateUpdatedAt(emailBundle[emailTemplateKey].updatedAt)}</p>
+            <div className="space-y-4 border-t border-[#e8d8ce] pt-5">
+              {EMAIL_TEMPLATE_SPECS[emailTemplateKey].fields.map((f) => (
+                <label key={f.id} className="block text-sm">
+                  <span className="block font-semibold text-[#213c57] mb-1">{f.label}</span>
+                  {f.multiline ? (
+                    <textarea
+                      value={emailFieldsDraft[f.id] ?? ''}
+                      onChange={(e) => setEmailFieldsDraft((d) => ({ ...d, [f.id]: e.target.value }))}
+                      rows={f.id.includes('body') || f.id.includes('Paragraph') ? 5 : 3}
+                      className="w-full border border-[#e8d8ce] rounded-xl px-3 py-2 text-sm bg-white font-normal min-h-[4rem]"
+                      placeholder={f.placeholder}
+                    />
+                  ) : (
+                    <input
+                      type="text"
+                      value={emailFieldsDraft[f.id] ?? ''}
+                      onChange={(e) => setEmailFieldsDraft((d) => ({ ...d, [f.id]: e.target.value }))}
+                      className="w-full border border-[#e8d8ce] rounded-xl px-3 py-2 text-sm bg-white"
+                      placeholder={f.placeholder}
+                    />
+                  )}
+                </label>
+              ))}
+            </div>
+            <div className="flex flex-wrap gap-3 pt-2">
+              <button
+                type="button"
+                disabled={isPending}
+                onClick={() => submitEmailTemplateSave()}
+                className="text-sm font-bold bg-[#f05a28] hover:bg-[#d94e21] text-white px-5 py-2.5 rounded-full disabled:opacity-50"
+              >
+                Save this template
+              </button>
+              <button
+                type="button"
+                disabled={isPending}
+                onClick={() => submitEmailTemplateReset()}
+                className="text-sm font-bold border border-slate-300 text-slate-700 hover:bg-slate-50 px-5 py-2.5 rounded-full disabled:opacity-50"
+              >
+                Reset to defaults
+              </button>
+            </div>
+          </section>
         )}
 
         {tab === 'registrations' && (

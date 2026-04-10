@@ -1,153 +1,183 @@
 import { REPORT_CARD_RATING_SCALE_DOC, REPORT_CARD_SKILL_PILLARS_DOC } from '@/lib/report-card-doc-reference'
 import { REPORT_METRIC_GROUPS, type CoachReportMetricKey } from '@/lib/player-report-metrics'
+import { REPORT_CARD_GUIDE_URL } from '@/lib/email-template-catalog'
+import { interpolateTemplate } from '@/lib/email-template-interpolate'
 import { escapeHtml } from '@/lib/html-escape'
 
 const RATING_BY_VALUE: Map<number, (typeof REPORT_CARD_RATING_SCALE_DOC)[number]> = new Map(
   REPORT_CARD_RATING_SCALE_DOC.map((r) => [r.value, r]),
 )
 
-export function htmlRegistrationConfirmed(params: {
-  parentFirstName: string
-  playerName: string
-  campWeekLabel: string
-}) {
-  const { parentFirstName, playerName, campWeekLabel } = params
+function line(
+  fieldId: string,
+  fields: Record<string, string>,
+  vars: Record<string, string>,
+): string {
+  return escapeHtml(interpolateTemplate(fields[fieldId] ?? '', vars))
+}
+
+function preline(
+  fieldId: string,
+  fields: Record<string, string>,
+  vars: Record<string, string>,
+): string {
+  const raw = interpolateTemplate(fields[fieldId] ?? '', vars)
+  return escapeHtml(raw).replace(/\n/g, '<br/>')
+}
+
+export function htmlRegistrationConfirmed(
+  params: { parentFirstName: string; playerName: string; campWeekLabel: string },
+  fields: Record<string, string>,
+) {
+  const vars = {
+    parentFirstName: params.parentFirstName,
+    playerName: params.playerName,
+    campWeekLabel: params.campWeekLabel,
+  }
   return `
   <div style="font-family: system-ui, sans-serif; max-width: 560px; line-height: 1.55; color: #1e293b;">
-    <h1 style="color: #062744; font-size: 22px;">Camp registration confirmed</h1>
-    <p>Hi ${escapeHtml(parentFirstName)},</p>
-    <p>
-      <strong>${escapeHtml(playerName)}</strong> is <strong>confirmed</strong> for
-      <strong>${escapeHtml(campWeekLabel)}</strong>.
-    </p>
-    <p>We look forward to seeing you at Beach Chalet. If you have questions, reply to this email.</p>
-    <p style="margin-top: 2rem; color: #64748b; font-size: 14px;">— Next Level Soccer SF</p>
+    <h1 style="color: #062744; font-size: 22px;">${line('heading', fields, vars)}</h1>
+    <p>Hi ${escapeHtml(params.parentFirstName)},</p>
+    <p style="white-space:pre-wrap;">${line('confirmedParagraph', fields, vars)}</p>
+    <p>${line('bodyClosing', fields, vars)}</p>
+    <p style="margin-top: 2rem; color: #64748b; font-size: 14px;">${line('signOff', fields, vars)}</p>
   </div>`
 }
 
-export function htmlRegistrationDeclined(params: {
-  parentFirstName: string
-  playerName: string
-  campWeekLabel: string
-  reason: string
-}) {
-  const { parentFirstName, playerName, campWeekLabel, reason } = params
+export function htmlRegistrationDeclined(
+  params: {
+    parentFirstName: string
+    playerName: string
+    campWeekLabel: string
+    reason: string
+  },
+  fields: Record<string, string>,
+) {
+  const vars = {
+    parentFirstName: params.parentFirstName,
+    playerName: params.playerName,
+    campWeekLabel: params.campWeekLabel,
+  }
   return `
   <div style="font-family: system-ui, sans-serif; max-width: 560px; line-height: 1.55; color: #1e293b;">
-    <h1 style="color: #062744; font-size: 22px;">Camp week not available</h1>
-    <p>Hi ${escapeHtml(parentFirstName)},</p>
-    <p>
-      We are unable to confirm <strong>${escapeHtml(playerName)}</strong> for
-      <strong>${escapeHtml(campWeekLabel)}</strong> at this time.
-    </p>
+    <h1 style="color: #062744; font-size: 22px;">${line('heading', fields, vars)}</h1>
+    <p>Hi ${escapeHtml(params.parentFirstName)},</p>
+    <p>${line('unableParagraph', fields, vars)}</p>
     <p style="background: #fff7ed; border: 1px solid #fed7aa; border-radius: 12px; padding: 12px 14px;">
-      <strong>Reason:</strong><br/>${escapeHtml(reason)}
+      <strong>Reason:</strong><br/>${escapeHtml(params.reason)}
     </p>
-    <p>
-      If spots open up or you would like to try another week, you can register again from our website when space is available.
-    </p>
-    <p style="margin-top: 2rem; color: #64748b; font-size: 14px;">— Next Level Soccer SF</p>
+    <p>${line('afterReasonParagraph', fields, vars)}</p>
+    <p style="margin-top: 2rem; color: #64748b; font-size: 14px;">${line('signOff', fields, vars)}</p>
   </div>`
 }
 
-export function htmlOrganizerCampCancelled(params: {
-  parentFirstName: string
-  playerName: string
-  campWeekLabel: string
-  /** When true, payment had been received — copy references automatic refund. */
-  wasPaidConfirmed: boolean
-}) {
-  const { parentFirstName, playerName, campWeekLabel, wasPaidConfirmed } = params
-  const refundBit = wasPaidConfirmed
-    ? `<p>Because you had already paid for this week, we are <strong>processing your refund automatically</strong>. You do not need to submit a refund request in the parent dashboard — this cancellation was initiated by our staff due to low enrollment, not by you.</p>
-       <p>You will see this week marked as cancelled with the refund noted there once processing completes.</p>`
-    : `<p>No payment was required for this week yet, so there is nothing to refund. This cancellation was initiated by our staff (low enrollment), not from your account.</p>`
+export function htmlOrganizerCampCancelled(
+  params: {
+    parentFirstName: string
+    playerName: string
+    campWeekLabel: string
+    wasPaidConfirmed: boolean
+  },
+  fields: Record<string, string>,
+) {
+  const vars = {
+    parentFirstName: params.parentFirstName,
+    playerName: params.playerName,
+    campWeekLabel: params.campWeekLabel,
+  }
+  const refundBit = params.wasPaidConfirmed
+    ? `<div style="white-space:pre-wrap;line-height:1.55;">${preline('bodyPaidRefund', fields, vars)}</div>`
+    : `<div style="white-space:pre-wrap;line-height:1.55;">${preline('bodyUnpaid', fields, vars)}</div>`
 
   return `
   <div style="font-family: system-ui, sans-serif; max-width: 560px; line-height: 1.55; color: #1e293b;">
-    <h1 style="color: #062744; font-size: 22px;">Camp week cancelled</h1>
-    <p>Hi ${escapeHtml(parentFirstName)},</p>
-    <p>
-      Unfortunately, <strong>${escapeHtml(campWeekLabel)}</strong> will not run — we did not reach the minimum number of registered players for that week.
-    </p>
-    <p>
-      <strong>${escapeHtml(playerName)}</strong> is no longer scheduled for this week.
-    </p>
+    <h1 style="color: #062744; font-size: 22px;">${line('heading', fields, vars)}</h1>
+    <p>Hi ${escapeHtml(params.parentFirstName)},</p>
+    <p>${line('lowEnrollmentParagraph', fields, vars)}</p>
+    <p>${line('playerRemovedLine', fields, vars)}</p>
     ${refundBit}
-    <p>We’re sorry for the inconvenience. You can register for another week on our website when it works for your family. Questions? Reply to this email.</p>
-    <p style="margin-top: 2rem; color: #64748b; font-size: 14px;">— Next Level Soccer SF</p>
+    <p>${line('closingParagraph', fields, vars)}</p>
+    <p style="margin-top: 2rem; color: #64748b; font-size: 14px;">${line('signOff', fields, vars)}</p>
   </div>`
 }
 
-export function htmlRefundApproved(params: {
-  parentFirstName: string
-  playerName: string
-  campWeekLabel: string
-}) {
-  const { parentFirstName, playerName, campWeekLabel } = params
+export function htmlRefundApproved(
+  params: { parentFirstName: string; playerName: string; campWeekLabel: string },
+  fields: Record<string, string>,
+) {
+  const vars = {
+    parentFirstName: params.parentFirstName,
+    playerName: params.playerName,
+    campWeekLabel: params.campWeekLabel,
+  }
   return `
   <div style="font-family: system-ui, sans-serif; max-width: 560px; line-height: 1.55; color: #1e293b;">
-    <h1 style="color: #062744; font-size: 22px;">Refund request approved</h1>
-    <p>Hi ${escapeHtml(parentFirstName)},</p>
-    <p>
-      We have approved your refund request for <strong>${escapeHtml(playerName)}</strong> for
-      <strong>${escapeHtml(campWeekLabel)}</strong>. Our team will process it and follow up if we need anything else.
-    </p>
-    <p>If you have questions, reply to this email.</p>
-    <p style="margin-top: 2rem; color: #64748b; font-size: 14px;">— Next Level Soccer SF</p>
+    <h1 style="color: #062744; font-size: 22px;">${line('heading', fields, vars)}</h1>
+    <p>Hi ${escapeHtml(params.parentFirstName)},</p>
+    <p>${line('bodyLine1', fields, vars)}</p>
+    <p>${line('bodyLine2', fields, vars)}</p>
+    <p style="margin-top: 2rem; color: #64748b; font-size: 14px;">${line('signOff', fields, vars)}</p>
   </div>`
 }
 
-export function htmlRefundMoneySent(params: {
-  parentFirstName: string
-  playerName: string
-  campWeekLabel: string
-}) {
-  const { parentFirstName, playerName, campWeekLabel } = params
+export function htmlRefundMoneySent(
+  params: { parentFirstName: string; playerName: string; campWeekLabel: string },
+  fields: Record<string, string>,
+) {
+  const vars = {
+    parentFirstName: params.parentFirstName,
+    playerName: params.playerName,
+    campWeekLabel: params.campWeekLabel,
+  }
   return `
   <div style="font-family: system-ui, sans-serif; max-width: 560px; line-height: 1.55; color: #1e293b;">
-    <h1 style="color: #062744; font-size: 22px;">Refund processed</h1>
-    <p>Hi ${escapeHtml(parentFirstName)},</p>
-    <p>
-      This confirms that the refund for <strong>${escapeHtml(playerName)}</strong> for
-      <strong>${escapeHtml(campWeekLabel)}</strong> has been sent (or initiated with your payment provider).
-    </p>
-    <p>If you don&rsquo;t see it within a few business days, reply to this email and we&rsquo;ll help track it down.</p>
-    <p style="margin-top: 2rem; color: #64748b; font-size: 14px;">— Next Level Soccer SF</p>
+    <h1 style="color: #062744; font-size: 22px;">${line('heading', fields, vars)}</h1>
+    <p>Hi ${escapeHtml(params.parentFirstName)},</p>
+    <p>${line('bodyLine1', fields, vars)}</p>
+    <p>${line('bodyLine2', fields, vars)}</p>
+    <p style="margin-top: 2rem; color: #64748b; font-size: 14px;">${line('signOff', fields, vars)}</p>
   </div>`
 }
 
-export function htmlRefundDeclined(params: {
-  parentFirstName: string
-  playerName: string
-  campWeekLabel: string
-  reason: string
-}) {
-  const { parentFirstName, playerName, campWeekLabel, reason } = params
+export function htmlRefundDeclined(
+  params: {
+    parentFirstName: string
+    playerName: string
+    campWeekLabel: string
+    reason: string
+  },
+  fields: Record<string, string>,
+) {
+  const vars = {
+    parentFirstName: params.parentFirstName,
+    playerName: params.playerName,
+    campWeekLabel: params.campWeekLabel,
+  }
   return `
   <div style="font-family: system-ui, sans-serif; max-width: 560px; line-height: 1.55; color: #1e293b;">
-    <h1 style="color: #062744; font-size: 22px;">Update on your refund request</h1>
-    <p>Hi ${escapeHtml(parentFirstName)},</p>
-    <p>
-      We are unable to approve the refund request for <strong>${escapeHtml(playerName)}</strong> for
-      <strong>${escapeHtml(campWeekLabel)}</strong> at this time.
-    </p>
+    <h1 style="color: #062744; font-size: 22px;">${line('heading', fields, vars)}</h1>
+    <p>Hi ${escapeHtml(params.parentFirstName)},</p>
+    <p>${line('bodyLine1', fields, vars)}</p>
     <p style="background: #fff7ed; border: 1px solid #fed7aa; border-radius: 12px; padding: 12px 14px;">
-      <strong>Reason:</strong><br/>${escapeHtml(reason)}
+      <strong>Reason:</strong><br/>${escapeHtml(params.reason)}
     </p>
-    <p>Your registration for this week remains active unless we have contacted you separately. Reply to this email with questions.</p>
-    <p style="margin-top: 2rem; color: #64748b; font-size: 14px;">— Next Level Soccer SF</p>
+    <p>${line('afterReasonParagraph', fields, vars)}</p>
+    <p style="margin-top: 2rem; color: #64748b; font-size: 14px;">${line('signOff', fields, vars)}</p>
   </div>`
 }
 
-export function htmlParentWeeklyReport(params: {
-  parentFirstName: string
-  childName: string
-  campWeekLabel: string
-  coachOverview: string
-  scores: Record<CoachReportMetricKey, number>
-}) {
+export function htmlParentWeeklyReport(
+  params: {
+    parentFirstName: string
+    childName: string
+    campWeekLabel: string
+    coachOverview: string
+    scores: Record<CoachReportMetricKey, number>
+  },
+  fields: Record<string, string>,
+) {
   const { parentFirstName, childName, campWeekLabel, coachOverview, scores } = params
+  const vars = { parentFirstName, childName, campWeekLabel }
 
   const scaleRows = REPORT_CARD_RATING_SCALE_DOC.map(
     (r) =>
@@ -175,24 +205,27 @@ export function htmlParentWeeklyReport(params: {
     `)
   }
 
+  const heading = line('headingTemplate', fields, vars)
+  const linkText = line('linkLabel', fields, vars)
+
   return `
   <div style="font-family: system-ui, sans-serif; max-width: 640px; line-height: 1.55; color: #1e293b;">
-    <h1 style="color: #062744; font-size: 22px;">Weekly report card — ${escapeHtml(campWeekLabel)}</h1>
+    <h1 style="color: #062744; font-size: 22px;">${heading}</h1>
     <p>Hi ${escapeHtml(parentFirstName)},</p>
-    <p>Here is ${escapeHtml(childName)}&rsquo;s coach report for <strong>${escapeHtml(campWeekLabel)}</strong>, using the same 1&ndash;5 scale and skills as our <a href="https://nextlevelsoccersf.com/report-card-skills" style="color:#f05a28;">report card guide</a>.</p>
+    <p>${line('introBeforeLink', fields, vars)}<a href="${REPORT_CARD_GUIDE_URL}" style="color:#f05a28;">${linkText}</a>${line('introAfterLink', fields, vars)}</p>
 
-    <h2 style="color:#062744;font-size:16px;margin-top:24px;">Coach overview</h2>
+    <h2 style="color:#062744;font-size:16px;margin-top:24px;">${line('overviewTitle', fields, vars)}</h2>
     <div style="background:#faf8f5;border:1px solid #e8d8ce;border-radius:12px;padding:14px 16px;white-space:pre-wrap;">${escapeHtml(coachOverview)}</div>
 
-    <h2 style="color:#062744;font-size:16px;margin-top:24px;">Rating scale (1 to 5)</h2>
+    <h2 style="color:#062744;font-size:16px;margin-top:24px;">${line('ratingScaleTitle', fields, vars)}</h2>
     <table style="width:100%;border-collapse:collapse;font-size:13px;margin-bottom:16px;">
       <thead><tr style="background:#f7f2e8;"><th style="padding:6px;border:1px solid #e8d8ce;">#</th><th style="padding:6px;border:1px solid #e8d8ce;">Label</th><th style="padding:6px;border:1px solid #e8d8ce;">Meaning</th></tr></thead>
       <tbody>${scaleRows}</tbody>
     </table>
 
-    <h2 style="color:#062744;font-size:16px;">Skills assessed</h2>
+    <h2 style="color:#062744;font-size:16px;">${line('skillsTitle', fields, vars)}</h2>
     ${skillSections.join('')}
 
-    <p style="margin-top: 2rem; color: #64748b; font-size: 14px;">Questions? Reply to this email.<br/>— Next Level Soccer SF</p>
+    <p style="margin-top: 2rem; color: #64748b; font-size: 14px;">${line('footerLine', fields, vars)}<br/>${line('signOff', fields, vars)}</p>
   </div>`
 }

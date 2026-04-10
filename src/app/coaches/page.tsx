@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { CAMP_SESSIONS } from '@/lib/camp-weeks'
 import { getStaffAdminUser } from '@/lib/admin'
+import { loadAllResolvedEmailTemplates } from '@/lib/email-templates-resolve'
 import { listCoachRegistrations, listCoachWeekReportRows } from './actions'
 import CoachesSignIn from './CoachesSignIn'
 import CoachesWrongAccount from './CoachesWrongAccount'
@@ -25,8 +26,9 @@ export default async function CoachesPage() {
     return <CoachesSignIn />
   }
 
-  const [regsRes, ...weekSlices] = await Promise.all([
+  const [regsRes, emailBundle, ...weekSlices] = await Promise.all([
     listCoachRegistrations(),
+    loadAllResolvedEmailTemplates(),
     ...CAMP_SESSIONS.map((w) => listCoachWeekReportRows(w)),
   ])
 
@@ -49,6 +51,10 @@ export default async function CoachesPage() {
   })
 
   return (
-    <CoachPortal initialRegistrations={regsRes.rows} initialWeekPlayers={initialWeekPlayers} />
+    <CoachPortal
+      initialRegistrations={regsRes.rows}
+      initialWeekPlayers={initialWeekPlayers}
+      initialEmailTemplateBundle={emailBundle}
+    />
   )
 }

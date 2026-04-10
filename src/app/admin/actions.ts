@@ -2,7 +2,10 @@
 
 import { Resend } from 'resend'
 import { getStaffAdminUser } from '@/lib/admin'
+import { buildEmailSubject } from '@/lib/email-template-interpolate'
+import { resolveEmailTemplateFields } from '@/lib/email-templates-resolve'
 import { REPLY_TO_EMAIL, SENDER_EMAIL } from '@/lib/resend-sender'
+import { buildWelcomeToCampEmailHtml } from '@/lib/transactional-parent-email-html'
 import { campWeekSortIndex } from '@/lib/camp-weeks'
 import { createClient } from '@/lib/supabase/server'
 import { createServiceRoleClient } from '@/lib/supabase/service'
@@ -199,24 +202,15 @@ export async function sendWelcomeEmail(submissionId: string): Promise<ActionOk> 
 
   const parentName = `${sub.parent_first_name} ${sub.parent_last_name}`.trim()
 
-  const html = `
-    <div style="font-family: system-ui, sans-serif; max-width: 560px; line-height: 1.5;">
-      <h1 style="color: #062744;">Welcome to Camp</h1>
-      <p>Hi ${escapeHtml(parentName)},</p>
-      <p>Thank you — your payment is confirmed. We’re excited to have your player(s) at Next Level Soccer Development Camps at Beach Chalet.</p>
-      <p><strong>Registered players &amp; weeks:</strong></p>
-      <ul>${childLines}</ul>
-      <p>Training runs Monday–Friday, 3:30–7:30 PM. If you have questions, reply to this email.</p>
-      <p style="margin-top: 2rem; color: #64748b; font-size: 14px;">— Next Level Soccer SF</p>
-    </div>
-  `
+  const tpl = await resolveEmailTemplateFields('welcome_to_camp')
+  const html = buildWelcomeToCampEmailHtml({ parentFullName: parentName, childListHtml: childLines }, tpl)
 
   const resend = new Resend(apiKey)
   const { error: sendErr } = await resend.emails.send({
     from: SENDER_EMAIL,
     replyTo: REPLY_TO_EMAIL,
     to: sub.parent_email,
-    subject: 'Welcome to Camp — Next Level Soccer SF',
+    subject: buildEmailSubject(tpl.subjectTemplate, { parentFullName: parentName }),
     html,
   })
 

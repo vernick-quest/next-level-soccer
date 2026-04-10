@@ -3,7 +3,10 @@
 import { Resend } from 'resend'
 import { insertDenormalizedRegistrationRows } from '@/lib/denormalized-registrations-insert'
 import { validateCampWeekCapacityForSubmission } from '@/lib/home-camp-spots'
+import { buildEmailSubject } from '@/lib/email-template-interpolate'
+import { resolveEmailTemplateFields } from '@/lib/email-templates-resolve'
 import { REPLY_TO_EMAIL, SENDER_EMAIL } from '@/lib/resend-sender'
+import { buildRegistrationReceivedEmailHtml } from '@/lib/transactional-parent-email-html'
 import { createClient, createServiceRoleClient } from '@/lib/supabase/server'
 
 function throwSupabaseError(context: string, error: unknown): never {
@@ -272,28 +275,19 @@ export async function submitFamilyRegistration(data: FamilyRegistrationInput): P
         return `<li><strong>${escapeHtmlEmail(name)}</strong> — ${escapeHtmlEmail(weeks)}</li>`
       })
       .join('')
-    const html = `
-      <div style="font-family: system-ui, sans-serif; max-width: 560px; line-height: 1.5;">
-        <h1 style="color: #062744;">We received your registration</h1>
-        <p>Hi ${escapeHtmlEmail(parentName)},</p>
-        <p>Thanks for signing up.</p>
-        <p><strong>Paid / confirmed</strong></p>
-        <p style="color:#64748b;font-size:14px;">None yet — spots are confirmed after we receive payment.</p>
-        <p><strong>New — payment required</strong></p>
-        <ul>${newLines}</ul>
-        <p><strong>Amount due for these camp weeks:</strong> $${(newAmountCents / 100).toLocaleString('en-US')}</p>
-        <p>Pay via Zelle or Venmo to confirm your spots. If you have questions, reply to this email.</p>
-        <p style="margin-top: 2rem; color: #64748b; font-size: 14px;">— Next Level Soccer SF</p>
-      </div>
-    `
+    const amountDollars = `$${(newAmountCents / 100).toLocaleString('en-US')}`
+    const tpl = await resolveEmailTemplateFields('registration_received')
+    const html = buildRegistrationReceivedEmailHtml(
+      { parentFullName: parentName, newWeeksListHtml: newLines, amountDollars },
+      tpl,
+    )
     console.log('Email payload generated', { type: 'initial_registration', newAmountCents })
-    console.log('DEBUG: Reached email block')
     const resend = new Resend(apiKey)
     const { error: sendErr } = await resend.emails.send({
       from: SENDER_EMAIL,
       replyTo: REPLY_TO_EMAIL,
       to: data.parentEmail,
-      subject: 'Registration received — Next Level Soccer SF',
+      subject: buildEmailSubject(tpl.subjectTemplate, { parentFullName: parentName, amountDollars }),
       html,
     })
     if (sendErr) {

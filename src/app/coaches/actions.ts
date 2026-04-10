@@ -18,6 +18,8 @@ import {
   type CoachReportMetricKey,
   type ReportMetricKey,
 } from '@/lib/player-report-metrics'
+import { buildEmailSubject } from '@/lib/email-template-interpolate'
+import { resolveEmailTemplateFields } from '@/lib/email-templates-resolve'
 import { REPLY_TO_EMAIL, SENDER_EMAIL } from '@/lib/resend-sender'
 import { createClient } from '@/lib/supabase/server'
 import { createServiceRoleClient } from '@/lib/supabase/service'
@@ -359,32 +361,41 @@ export async function setRegistrationDecision(input: {
 
   if (apiKey && parentEmail) {
     const resend = new Resend(apiKey)
+    const subjVars = { playerName, campWeekLabel: weekLabel }
     if (input.decision === 'confirmed') {
-      const html = htmlRegistrationConfirmed({
-        parentFirstName: parentFirst,
-        playerName,
-        campWeekLabel: weekLabel,
-      })
+      const copy = await resolveEmailTemplateFields('registration_confirmed')
+      const html = htmlRegistrationConfirmed(
+        {
+          parentFirstName: parentFirst,
+          playerName,
+          campWeekLabel: weekLabel,
+        },
+        copy,
+      )
       const { error: sendErr } = await resend.emails.send({
         from: SENDER_EMAIL,
         replyTo: REPLY_TO_EMAIL,
         to: parentEmail,
-        subject: `Confirmed: ${playerName} — ${weekLabel} — Next Level Soccer SF`,
+        subject: buildEmailSubject(copy.subjectTemplate, subjVars),
         html,
       })
       if (sendErr) console.error('setRegistrationDecision confirm email:', sendErr)
     } else {
-      const html = htmlRegistrationDeclined({
-        parentFirstName: parentFirst,
-        playerName,
-        campWeekLabel: weekLabel,
-        reason,
-      })
+      const copy = await resolveEmailTemplateFields('registration_declined')
+      const html = htmlRegistrationDeclined(
+        {
+          parentFirstName: parentFirst,
+          playerName,
+          campWeekLabel: weekLabel,
+          reason,
+        },
+        copy,
+      )
       const { error: sendErr } = await resend.emails.send({
         from: SENDER_EMAIL,
         replyTo: REPLY_TO_EMAIL,
         to: parentEmail,
-        subject: `Update: ${playerName} — ${weekLabel} — Next Level Soccer SF`,
+        subject: buildEmailSubject(copy.subjectTemplate, subjVars),
         html,
       })
       if (sendErr) console.error('setRegistrationDecision decline email:', sendErr)
@@ -479,32 +490,41 @@ export async function resolveRefundRequest(input: {
 
   if (apiKey && parentEmail) {
     const resend = new Resend(apiKey)
+    const subjVars = { playerName, campWeekLabel: weekLabel }
     if (input.decision === 'approved') {
-      const html = htmlRefundApproved({
-        parentFirstName: parentFirst,
-        playerName,
-        campWeekLabel: weekLabel,
-      })
+      const copy = await resolveEmailTemplateFields('refund_approved')
+      const html = htmlRefundApproved(
+        {
+          parentFirstName: parentFirst,
+          playerName,
+          campWeekLabel: weekLabel,
+        },
+        copy,
+      )
       const { error: sendErr } = await resend.emails.send({
         from: SENDER_EMAIL,
         replyTo: REPLY_TO_EMAIL,
         to: parentEmail,
-        subject: `Refund approved: ${playerName} — ${weekLabel} — Next Level Soccer SF`,
+        subject: buildEmailSubject(copy.subjectTemplate, subjVars),
         html,
       })
       if (sendErr) console.error('resolveRefundRequest approve email:', sendErr)
     } else {
-      const html = htmlRefundDeclined({
-        parentFirstName: parentFirst,
-        playerName,
-        campWeekLabel: weekLabel,
-        reason,
-      })
+      const copy = await resolveEmailTemplateFields('refund_declined')
+      const html = htmlRefundDeclined(
+        {
+          parentFirstName: parentFirst,
+          playerName,
+          campWeekLabel: weekLabel,
+          reason,
+        },
+        copy,
+      )
       const { error: sendErr } = await resend.emails.send({
         from: SENDER_EMAIL,
         replyTo: REPLY_TO_EMAIL,
         to: parentEmail,
-        subject: `Refund request update: ${playerName} — ${weekLabel} — Next Level Soccer SF`,
+        subject: buildEmailSubject(copy.subjectTemplate, subjVars),
         html,
       })
       if (sendErr) console.error('resolveRefundRequest decline email:', sendErr)
@@ -630,17 +650,21 @@ export async function markRefundMoneySent(input: { registrationId: string }): Pr
   const weekLabel = campNameFromWeekLabel(campSession)
 
   if (apiKey && parentEmail) {
-    const html = htmlRefundMoneySent({
-      parentFirstName: parentFirst,
-      playerName,
-      campWeekLabel: weekLabel,
-    })
+    const copy = await resolveEmailTemplateFields('refund_money_sent')
+    const html = htmlRefundMoneySent(
+      {
+        parentFirstName: parentFirst,
+        playerName,
+        campWeekLabel: weekLabel,
+      },
+      copy,
+    )
     const resend = new Resend(apiKey)
     const { error: sendErr } = await resend.emails.send({
       from: SENDER_EMAIL,
       replyTo: REPLY_TO_EMAIL,
       to: parentEmail,
-      subject: `Refund sent: ${playerName} — ${weekLabel} — Next Level Soccer SF`,
+      subject: buildEmailSubject(copy.subjectTemplate, { playerName, campWeekLabel: weekLabel }),
       html,
     })
     if (sendErr) console.error('markRefundMoneySent email:', sendErr)
@@ -699,6 +723,7 @@ export async function cancelCampWeekLowEnrollment(input: {
   const apiKey = process.env.RESEND_API_KEY
   const resend = apiKey ? new Resend(apiKey) : null
   const now = new Date().toISOString()
+  const organizerCopy = await resolveEmailTemplateFields('organizer_camp_cancelled')
 
   for (const r of toProcess) {
     const st = (r.status ?? '').toLowerCase()
@@ -729,17 +754,23 @@ export async function cancelCampWeekLowEnrollment(input: {
     const weekLabel = campNameFromWeekLabel(week)
 
     if (resend && parentEmail) {
-      const html = htmlOrganizerCampCancelled({
-        parentFirstName: parentFirst,
-        playerName,
-        campWeekLabel: weekLabel,
-        wasPaidConfirmed,
-      })
+      const html = htmlOrganizerCampCancelled(
+        {
+          parentFirstName: parentFirst,
+          playerName,
+          campWeekLabel: weekLabel,
+          wasPaidConfirmed,
+        },
+        organizerCopy,
+      )
       const { error: sendErr } = await resend.emails.send({
         from: SENDER_EMAIL,
         replyTo: REPLY_TO_EMAIL,
         to: parentEmail,
-        subject: `Camp week cancelled — ${weekLabel} — Next Level Soccer SF`,
+        subject: buildEmailSubject(organizerCopy.subjectTemplate, {
+          playerName,
+          campWeekLabel: weekLabel,
+        }),
         html,
       })
       if (sendErr) console.error('cancelCampWeekLowEnrollment email:', sendErr)
@@ -879,19 +910,23 @@ export async function savePlayerReport(payload: {
 
   let sentAt: string | null = null
   if (apiKey && parentEmail) {
-    const html = htmlParentWeeklyReport({
-      parentFirstName: parentFirst,
-      childName,
-      campWeekLabel: weekLabel,
-      coachOverview: overview,
-      scores: payload.scores,
-    })
+    const reportCopy = await resolveEmailTemplateFields('weekly_report')
+    const html = htmlParentWeeklyReport(
+      {
+        parentFirstName: parentFirst,
+        childName,
+        campWeekLabel: weekLabel,
+        coachOverview: overview,
+        scores: payload.scores,
+      },
+      reportCopy,
+    )
     const resend = new Resend(apiKey)
     const { error: sendErr } = await resend.emails.send({
       from: SENDER_EMAIL,
       replyTo: REPLY_TO_EMAIL,
       to: parentEmail,
-      subject: `Report card: ${childName} — ${weekLabel} — Next Level Soccer SF`,
+      subject: buildEmailSubject(reportCopy.subjectTemplate, { childName, campWeekLabel: weekLabel }),
       html,
     })
     if (sendErr) {

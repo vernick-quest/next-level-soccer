@@ -464,3 +464,18 @@ begin
     end;
   end loop;
 end $$;
+
+-- ---------------------------------------------------------------------------
+-- Parent email copy overrides (structured fields; coach portal + sends merge with code defaults)
+-- ---------------------------------------------------------------------------
+create table if not exists public.email_template_overrides (
+  template_key text primary key,
+  fields jsonb not null default '{}',
+  updated_at timestamptz not null default now()
+);
+
+create index if not exists email_template_overrides_updated_at_idx
+  on public.email_template_overrides (updated_at desc);
+
+alter table public.email_template_overrides enable row level security;
+-- No policies: anon/authenticated cannot read/write; service role bypasses RLS for server actions.

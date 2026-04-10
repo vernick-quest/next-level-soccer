@@ -1,8 +1,11 @@
 'use server'
 
 import { Resend } from 'resend'
+import { buildEmailSubject } from '@/lib/email-template-interpolate'
+import { resolveEmailTemplateFields } from '@/lib/email-templates-resolve'
 import { insertDenormalizedRegistrationRows } from '@/lib/denormalized-registrations-insert'
 import { REPLY_TO_EMAIL, SENDER_EMAIL } from '@/lib/resend-sender'
+import { buildAdditionalWeeksEmailHtml } from '@/lib/transactional-parent-email-html'
 import { CAMP_SESSIONS, campWeekSortIndex } from '@/lib/camp-weeks'
 import { createClient } from '@/lib/supabase/server'
 import { createServiceRoleClient } from '@/lib/supabase/service'
@@ -1114,19 +1117,17 @@ export async function submitAdditionalWeeks(input: {
       confirmedLines.length > 0
         ? `<ul>${confirmedLines.join('')}</ul>`
         : '<p style="color:#64748b;font-size:14px;">None yet.</p>'
-    const html = `
-      <div style="font-family: system-ui, sans-serif; max-width: 560px; line-height: 1.5;">
-        <h1 style="color: #062744;">Camp weeks updated</h1>
-        <p>Hi ${escapeHtml(parentName)},</p>
-        <p><strong>Paid / confirmed</strong></p>
-        ${confirmedBlock}
-        <p><strong>New — payment required</strong></p>
-        <ul>${newLines.join('')}</ul>
-        <p><strong>Amount due for these additional camp weeks:</strong> $${(newAmountCents / 100).toLocaleString('en-US')}</p>
-        <p>Pay via Zelle or Venmo to reserve these spots. Questions? Reply to this email.</p>
-        <p style="margin-top: 2rem; color: #64748b; font-size: 14px;">— Next Level Soccer SF</p>
-      </div>
-    `
+    const amountDollars = `$${(newAmountCents / 100).toLocaleString('en-US')}`
+    const tpl = await resolveEmailTemplateFields('additional_weeks_payment_due')
+    const html = buildAdditionalWeeksEmailHtml(
+      {
+        parentFullName: parentName,
+        confirmedBlockHtml: confirmedBlock,
+        newWeeksListHtml: newLines.join(''),
+        amountDollars,
+      },
+      tpl,
+    )
     console.log('Email payload generated', {
       type: 'incremental_weeks',
       newAmountCents,
@@ -1137,7 +1138,7 @@ export async function submitAdditionalWeeks(input: {
       from: SENDER_EMAIL,
       replyTo: REPLY_TO_EMAIL,
       to: parentEmail,
-      subject: 'Additional camp weeks — payment due — Next Level Soccer SF',
+      subject: buildEmailSubject(tpl.subjectTemplate, { parentFullName: parentName, amountDollars }),
       html,
     })
     if (sendErr) {
