@@ -42,6 +42,8 @@ export type DashboardCamp = {
   refundMoneySentAt: string | null
   refundDenialReason: string | null
   organizerCancelledAt: string | null
+  /** Set when staff declines this week (parent-facing dashboard). */
+  declineReason: string | null
 }
 
 export type DashboardIncrementalChild = {
@@ -108,6 +110,7 @@ type RegistrationRowForDisplay = {
   refund_money_sent_at?: string | null
   refund_denial_reason?: string | null
   organizer_cancelled_at?: string | null
+  decline_reason?: string | null
 }
 
 function displayStatusForRegistrationRow(row: RegistrationRowForDisplay): DashboardCamp['displayStatus'] {
@@ -159,6 +162,7 @@ function rowsToCamps(
     refund_money_sent_at?: string | null
     refund_denial_reason?: string | null
     organizer_cancelled_at?: string | null
+    decline_reason?: string | null
   }[],
   childIdBySubmissionAndName: Map<string, string>,
 ): DashboardCamp[] {
@@ -187,6 +191,7 @@ function rowsToCamps(
       refundMoneySentAt: row.refund_money_sent_at ?? null,
       refundDenialReason: row.refund_denial_reason ?? null,
       organizerCancelledAt: row.organizer_cancelled_at ?? null,
+      declineReason: row.decline_reason ?? null,
     })
   }
   return camps
@@ -417,6 +422,7 @@ export async function getDashboardPageData(): Promise<{
       refund_money_sent_at,
       refund_denial_reason,
       organizer_cancelled_at,
+      decline_reason,
       created_at
     `,
     )

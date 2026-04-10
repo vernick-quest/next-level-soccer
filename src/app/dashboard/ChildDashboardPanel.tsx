@@ -29,7 +29,7 @@ function weekStatusLabel(status: DashboardWeekStatus): string {
     case 'refund_requested':
       return 'Refund requested'
     case 'declined':
-      return 'Not confirmed'
+      return 'Declined'
     case 'completed':
       return 'Camp complete'
     case 'refund_processing':
@@ -87,6 +87,26 @@ function findCamp(camps: DashboardCamp[], registrationId: string | null): Dashbo
   return camps.find((c) => c.registrationId === registrationId)
 }
 
+/** Shorter tile title: “Unavailable” when copy matches low-enrollment / week-cancel style reasons. */
+function declinedShortTitle(declineReason: string | null | undefined): 'Declined' | 'Unavailable' {
+  const r = (declineReason ?? '').trim().toLowerCase()
+  if (
+    r.includes('minimum enrollment') ||
+    r.includes('low enrollment') ||
+    r.includes('camp week cancelled') ||
+    r.includes('not met')
+  ) {
+    return 'Unavailable'
+  }
+  return 'Declined'
+}
+
+function weekStatusTitle(tile: DashboardWeekTile, camps: DashboardCamp[]): string {
+  if (tile.status !== 'declined') return weekStatusLabel(tile.status)
+  const camp = findCamp(camps, tile.registrationId)
+  return declinedShortTitle(camp?.declineReason)
+}
+
 function weekStatusFootnote(tile: DashboardWeekTile, camps: DashboardCamp[]) {
   const camp = tile.registrationId ? findCamp(camps, tile.registrationId) : undefined
   if (!camp) return null
@@ -116,6 +136,22 @@ function weekStatusFootnote(tile: DashboardWeekTile, camps: DashboardCamp[]) {
       <p className="text-[10px] text-rose-900 mt-1.5 leading-snug">
         <span className="font-semibold">Reason: </span>
         {camp.refundDenialReason}
+      </p>
+    )
+  }
+  if (tile.status === 'declined') {
+    const reason = camp.declineReason?.trim()
+    if (reason) {
+      return (
+        <p className="text-[10px] text-rose-900 mt-1.5 leading-snug">
+          <span className="font-semibold">Reason from staff: </span>
+          <span className="whitespace-pre-wrap">{reason}</span>
+        </p>
+      )
+    }
+    return (
+      <p className="text-[10px] text-rose-800 mt-1.5 leading-snug">
+        Staff declined this registration. No reason was saved — email us if you need details.
       </p>
     )
   }
@@ -276,7 +312,7 @@ export default function ChildDashboardPanel({
           </span>
           <span className="inline-flex items-center gap-1.5">
             <span className="inline-block w-3 h-3 rounded-sm bg-rose-300 border border-rose-500" aria-hidden />
-            Not confirmed
+            Declined / Unavailable (staff reason below)
           </span>
         </div>
         {showIncremental && incrementalChild?.submissionPending && (
@@ -308,7 +344,7 @@ export default function ChildDashboardPanel({
                 </label>
               ) : (
                 <div className="text-[11px] font-semibold mt-1.5 uppercase tracking-wide">
-                  {weekStatusLabel(tile.status)}
+                  {weekStatusTitle(tile, camps)}
                 </div>
               )}
               {weekStatusFootnote(tile, camps)}
