@@ -13,6 +13,13 @@ import type {
   DashboardWeekTile,
 } from './actions'
 
+function formatDashboardTimestamp(iso: string | null | undefined) {
+  if (!iso) return ''
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return ''
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+}
+
 function weekStatusLabel(status: DashboardWeekStatus): string {
   switch (status) {
     case 'confirmed':
@@ -23,6 +30,14 @@ function weekStatusLabel(status: DashboardWeekStatus): string {
       return 'Refund requested'
     case 'declined':
       return 'Not confirmed'
+    case 'completed':
+      return 'Camp complete'
+    case 'refund_processing':
+      return 'Refund processing'
+    case 'refund_completed':
+      return 'Refund completed'
+    case 'refund_denied':
+      return 'Refund not approved'
     case 'addable':
       return 'Available to add'
     case 'full':
@@ -45,6 +60,14 @@ function weekTileClasses(status: DashboardWeekStatus): string {
       return `${base} border-violet-400 bg-violet-50 text-violet-950`
     case 'declined':
       return `${base} border-rose-400 bg-rose-50 text-rose-950`
+    case 'completed':
+      return `${base} border-teal-500 bg-teal-50 text-teal-950 shadow-sm`
+    case 'refund_processing':
+      return `${base} border-amber-500 bg-amber-50 text-amber-950`
+    case 'refund_completed':
+      return `${base} border-sky-500 bg-sky-50 text-sky-950`
+    case 'refund_denied':
+      return `${base} border-rose-300 bg-rose-50/90 text-rose-900`
     case 'addable':
       return `${base} border-[#f05a28] bg-white text-[#062744] hover:bg-[#fff8f3] shadow-sm`
     case 'full':
@@ -58,6 +81,41 @@ function weekTileClasses(status: DashboardWeekStatus): string {
 function findCamp(camps: DashboardCamp[], registrationId: string | null): DashboardCamp | undefined {
   if (!registrationId) return undefined
   return camps.find((c) => c.registrationId === registrationId)
+}
+
+function weekStatusFootnote(tile: DashboardWeekTile, camps: DashboardCamp[]) {
+  const camp = tile.registrationId ? findCamp(camps, tile.registrationId) : undefined
+  if (!camp) return null
+  if (tile.status === 'completed' && camp.campCompletedAt) {
+    return (
+      <p className="text-[10px] text-teal-900 mt-1.5 leading-snug">
+        No further online refunds for this week. Completed {formatDashboardTimestamp(camp.campCompletedAt)}.
+      </p>
+    )
+  }
+  if (tile.status === 'refund_completed' && camp.refundMoneySentAt) {
+    return (
+      <p className="text-[10px] text-sky-900 mt-1.5 font-medium leading-snug">
+        We&apos;ve recorded that your refund was sent ({formatDashboardTimestamp(camp.refundMoneySentAt)}).
+      </p>
+    )
+  }
+  if (tile.status === 'refund_processing') {
+    return (
+      <p className="text-[10px] text-amber-900 mt-1.5 leading-snug">
+        Staff approved your refund; you&apos;ll see another update here once the payment has gone out.
+      </p>
+    )
+  }
+  if (tile.status === 'refund_denied' && camp.refundDenialReason?.trim()) {
+    return (
+      <p className="text-[10px] text-rose-900 mt-1.5 leading-snug">
+        <span className="font-semibold">Reason: </span>
+        {camp.refundDenialReason}
+      </p>
+    )
+  }
+  return null
 }
 
 export default function ChildDashboardPanel({
@@ -176,6 +234,22 @@ export default function ChildDashboardPanel({
             Refund requested
           </span>
           <span className="inline-flex items-center gap-1.5">
+            <span className="inline-block w-3 h-3 rounded-sm bg-amber-500 border border-amber-600" aria-hidden />
+            Refund processing
+          </span>
+          <span className="inline-flex items-center gap-1.5">
+            <span className="inline-block w-3 h-3 rounded-sm bg-sky-400 border border-sky-600" aria-hidden />
+            Refund completed
+          </span>
+          <span className="inline-flex items-center gap-1.5">
+            <span className="inline-block w-3 h-3 rounded-sm bg-rose-200 border border-rose-400" aria-hidden />
+            Refund not approved
+          </span>
+          <span className="inline-flex items-center gap-1.5">
+            <span className="inline-block w-3 h-3 rounded-sm bg-teal-500 border border-teal-600" aria-hidden />
+            Camp complete
+          </span>
+          <span className="inline-flex items-center gap-1.5">
             <span className="inline-block w-3 h-3 rounded-sm bg-rose-300 border border-rose-500" aria-hidden />
             Not confirmed
           </span>
@@ -212,6 +286,7 @@ export default function ChildDashboardPanel({
                   {weekStatusLabel(tile.status)}
                 </div>
               )}
+              {weekStatusFootnote(tile, camps)}
               {weekActions(tile)}
             </div>
           ))}

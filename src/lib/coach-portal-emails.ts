@@ -69,6 +69,25 @@ export function htmlRefundApproved(params: {
   </div>`
 }
 
+export function htmlRefundMoneySent(params: {
+  parentFirstName: string
+  playerName: string
+  campWeekLabel: string
+}) {
+  const { parentFirstName, playerName, campWeekLabel } = params
+  return `
+  <div style="font-family: system-ui, sans-serif; max-width: 560px; line-height: 1.55; color: #1e293b;">
+    <h1 style="color: #062744; font-size: 22px;">Refund processed</h1>
+    <p>Hi ${escapeHtml(parentFirstName)},</p>
+    <p>
+      This confirms that the refund for <strong>${escapeHtml(playerName)}</strong> for
+      <strong>${escapeHtml(campWeekLabel)}</strong> has been sent (or initiated with your payment provider).
+    </p>
+    <p>If you don&rsquo;t see it within a few business days, reply to this email and we&rsquo;ll help track it down.</p>
+    <p style="margin-top: 2rem; color: #64748b; font-size: 14px;">— Next Level Soccer SF</p>
+  </div>`
+}
+
 export function htmlRefundDeclined(params: {
   parentFirstName: string
   playerName: string

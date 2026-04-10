@@ -6,6 +6,7 @@ import {
   htmlParentWeeklyReport,
   htmlRefundApproved,
   htmlRefundDeclined,
+  htmlRefundMoneySent,
   htmlRegistrationConfirmed,
   htmlRegistrationDeclined,
 } from '@/lib/coach-portal-emails'
@@ -44,6 +45,9 @@ export type CoachRegistrationRow = {
   decline_reason: string | null
   refund_requested_weeks: string[] | null
   refund_denial_reason: string | null
+  camp_completed_at: string | null
+  refund_approved_at: string | null
+  refund_money_sent_at: string | null
   player_first_name: string | null
   player_last_name: string | null
   parent_first_name: string | null
@@ -144,6 +148,9 @@ export async function listCoachRegistrations(): Promise<{
       decline_reason,
       refund_requested_weeks,
       refund_denial_reason,
+      camp_completed_at,
+      refund_approved_at,
+      refund_money_sent_at,
       player_first_name,
       player_last_name,
       parent_first_name,
@@ -167,6 +174,9 @@ export async function listCoachRegistrations(): Promise<{
     decline_reason: r.decline_reason ?? null,
     refund_requested_weeks: (r.refund_requested_weeks as string[] | null) ?? null,
     refund_denial_reason: (r as { refund_denial_reason?: string | null }).refund_denial_reason ?? null,
+    camp_completed_at: (r as { camp_completed_at?: string | null }).camp_completed_at ?? null,
+    refund_approved_at: (r as { refund_approved_at?: string | null }).refund_approved_at ?? null,
+    refund_money_sent_at: (r as { refund_money_sent_at?: string | null }).refund_money_sent_at ?? null,
     player_first_name: r.player_first_name,
     player_last_name: r.player_last_name,
     parent_first_name: r.parent_first_name,
@@ -428,10 +438,21 @@ export async function resolveRefundRequest(input: {
   const nextRefundWeeks = refunds.filter((w) => trimName(w) !== campSession)
   const { error: upErr } = await service
     .from('registrations')
-    .update({
-      refund_requested_weeks: nextRefundWeeks,
-      refund_denial_reason: input.decision === 'declined' ? reason : null,
-    })
+    .update(
+      input.decision === 'approved'
+        ? {
+            refund_requested_weeks: nextRefundWeeks,
+            refund_denial_reason: null,
+            refund_approved_at: new Date().toISOString(),
+            refund_money_sent_at: null,
+          }
+        : {
+            refund_requested_weeks: nextRefundWeeks,
+            refund_denial_reason: reason,
+            refund_approved_at: null,
+            refund_money_sent_at: null,
+          },
+    )
     .eq('id', input.registrationId)
 
   if (upErr) {
@@ -479,6 +500,135 @@ export async function resolveRefundRequest(input: {
     }
   } else {
     console.warn('resolveRefundRequest: missing RESEND_API_KEY or parent email; skip notification.')
+  }
+
+  return { success: true }
+}
+
+export type MarkCampCompleteResult = { success: true } | { success: false; error: string }
+
+export async function markCampWeekCompleted(input: { registrationId: string }): Promise<MarkCampCompleteResult> {
+  const staffUser = await getStaffAdminUser()
+  if (!staffUser) return { success: false, error: 'You must be signed in as staff.' }
+
+  let service: ReturnType<typeof createServiceRoleClient>
+  try {
+    service = createServiceRoleClient()
+  } catch {
+    return { success: false, error: 'Server configuration is incomplete.' }
+  }
+
+  const { data: row, error: fetchErr } = await service
+    .from('registrations')
+    .select(
+      'id, status, camp_session, refund_requested_weeks, camp_completed_at, refund_approved_at, refund_money_sent_at',
+    )
+    .eq('id', input.registrationId)
+    .single()
+
+  if (fetchErr || !row) return { success: false, error: 'Registration not found.' }
+  if ((row.status ?? '').toLowerCase() !== 'confirmed') {
+    return { success: false, error: 'Only confirmed registrations can be marked complete.' }
+  }
+  if ((row as { camp_completed_at?: string | null }).camp_completed_at) {
+    return { success: false, error: 'This week is already marked complete.' }
+  }
+
+  const cs = trimName(row.camp_session)
+  const refunds = ((row as { refund_requested_weeks?: string[] | null }).refund_requested_weeks ?? []) as string[]
+  if (cs && refunds.some((w) => trimName(w) === cs)) {
+    return {
+      success: false,
+      error: 'Resolve the open refund request (approve, decline, or mark refund paid) before marking this week complete.',
+    }
+  }
+  const approvedAt = (row as { refund_approved_at?: string | null }).refund_approved_at
+  const moneyAt = (row as { refund_money_sent_at?: string | null }).refund_money_sent_at
+  if (approvedAt && !moneyAt) {
+    return {
+      success: false,
+      error: 'Mark the refund as paid (or wait until it is) before marking this camp week complete.',
+    }
+  }
+
+  const { error: upErr } = await service
+    .from('registrations')
+    .update({ camp_completed_at: new Date().toISOString() })
+    .eq('id', input.registrationId)
+
+  if (upErr) {
+    console.error('markCampWeekCompleted:', upErr)
+    return { success: false, error: 'Could not update registration.' }
+  }
+
+  return { success: true }
+}
+
+export type MarkRefundPaidResult = { success: true } | { success: false; error: string }
+
+export async function markRefundMoneySent(input: { registrationId: string }): Promise<MarkRefundPaidResult> {
+  const staffUser = await getStaffAdminUser()
+  if (!staffUser) return { success: false, error: 'You must be signed in as staff.' }
+
+  let service: ReturnType<typeof createServiceRoleClient>
+  try {
+    service = createServiceRoleClient()
+  } catch {
+    return { success: false, error: 'Server configuration is incomplete.' }
+  }
+
+  const { data: row, error: fetchErr } = await service
+    .from('registrations')
+    .select(
+      'id, parent_email, parent_first_name, player_first_name, player_last_name, camp_session, status, refund_approved_at, refund_money_sent_at',
+    )
+    .eq('id', input.registrationId)
+    .single()
+
+  if (fetchErr || !row) return { success: false, error: 'Registration not found.' }
+  if ((row.status ?? '').toLowerCase() !== 'confirmed') {
+    return { success: false, error: 'Invalid registration status.' }
+  }
+  const approvedAt = (row as { refund_approved_at?: string | null }).refund_approved_at
+  const moneyAt = (row as { refund_money_sent_at?: string | null }).refund_money_sent_at
+  if (!approvedAt || moneyAt) {
+    return { success: false, error: 'This row is not waiting for a refund payout confirmation.' }
+  }
+
+  const campSession = trimName(row.camp_session)
+  const { error: upErr } = await service
+    .from('registrations')
+    .update({ refund_money_sent_at: new Date().toISOString() })
+    .eq('id', input.registrationId)
+
+  if (upErr) {
+    console.error('markRefundMoneySent:', upErr)
+    return { success: false, error: 'Could not update registration.' }
+  }
+
+  const apiKey = process.env.RESEND_API_KEY
+  const parentEmail = (row.parent_email ?? '').trim()
+  const parentFirst = (row.parent_first_name ?? '').trim() || 'there'
+  const playerName = `${row.player_first_name ?? ''} ${row.player_last_name ?? ''}`.trim()
+  const weekLabel = campNameFromWeekLabel(campSession)
+
+  if (apiKey && parentEmail) {
+    const html = htmlRefundMoneySent({
+      parentFirstName: parentFirst,
+      playerName,
+      campWeekLabel: weekLabel,
+    })
+    const resend = new Resend(apiKey)
+    const { error: sendErr } = await resend.emails.send({
+      from: SENDER_EMAIL,
+      replyTo: REPLY_TO_EMAIL,
+      to: parentEmail,
+      subject: `Refund sent: ${playerName} — ${weekLabel} — Next Level Soccer SF`,
+      html,
+    })
+    if (sendErr) console.error('markRefundMoneySent email:', sendErr)
+  } else {
+    console.warn('markRefundMoneySent: missing RESEND_API_KEY or parent email; skip notification.')
   }
 
   return { success: true }

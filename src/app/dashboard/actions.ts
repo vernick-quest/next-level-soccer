@@ -24,7 +24,19 @@ export type DashboardCamp = {
   /** Same as `camp_session` in the database. */
   week: string
   registrationStatus: string
-  displayStatus: 'pending' | 'confirmed' | 'refund_requested' | 'declined'
+  displayStatus:
+    | 'pending'
+    | 'confirmed'
+    | 'refund_requested'
+    | 'declined'
+    | 'completed'
+    | 'refund_processing'
+    | 'refund_completed'
+    | 'refund_denied'
+  campCompletedAt: string | null
+  refundApprovedAt: string | null
+  refundMoneySentAt: string | null
+  refundDenialReason: string | null
 }
 
 export type DashboardIncrementalChild = {
@@ -37,7 +49,7 @@ export type DashboardIncrementalChild = {
   existingWeeks: {
     week: string
     registrationId: string
-    displayStatus: 'pending' | 'confirmed' | 'refund_requested' | 'declined'
+    displayStatus: DashboardCamp['displayStatus']
   }[]
 }
 
@@ -47,6 +59,10 @@ export type DashboardWeekStatus =
   | 'pending'
   | 'refund_requested'
   | 'declined'
+  | 'completed'
+  | 'refund_processing'
+  | 'refund_completed'
+  | 'refund_denied'
   | 'addable'
   | 'full'
   | 'unavailable'
@@ -77,17 +93,28 @@ export type DashboardChildView = {
   reportsByWeekKey: Record<string, DashboardReportSnapshot>
 }
 
-function displayStatusForRegistrationRow(
-  status: string | null | undefined,
-  week: string,
-  refundWeeks: string[] | null | undefined,
-): DashboardIncrementalChild['existingWeeks'][0]['displayStatus'] {
-  const refundSet = new Set(refundWeeks ?? [])
-  const st = (status ?? 'pending').toLowerCase()
+type RegistrationRowForDisplay = {
+  status: string | null
+  camp_session: string | null
+  refund_requested_weeks: string[] | null
+  camp_completed_at?: string | null
+  refund_approved_at?: string | null
+  refund_money_sent_at?: string | null
+  refund_denial_reason?: string | null
+}
+
+function displayStatusForRegistrationRow(row: RegistrationRowForDisplay): DashboardCamp['displayStatus'] {
+  const week = (row.camp_session ?? '').trim()
+  const refundSet = new Set(row.refund_requested_weeks ?? [])
+  const st = (row.status ?? 'pending').toLowerCase()
+
+  if (row.camp_completed_at) return 'completed'
+  if (row.refund_money_sent_at) return 'refund_completed'
+  if (week && refundSet.has(week)) return 'refund_requested'
+  if (row.refund_approved_at && !row.refund_money_sent_at) return 'refund_processing'
+  if ((row.refund_denial_reason ?? '').trim()) return 'refund_denied'
   if (st === 'declined') return 'declined'
-  if (st === 'refund_requested' || (week && refundSet.has(week))) {
-    return 'refund_requested'
-  }
+  if (st === 'refund_requested') return 'refund_requested'
   if (st === 'confirmed') return 'confirmed'
   return 'pending'
 }
@@ -119,13 +146,17 @@ function rowsToCamps(
     player_last_name: string | null
     refund_requested_weeks: string[] | null
     registration_submission_id: string | null
+    camp_completed_at?: string | null
+    refund_approved_at?: string | null
+    refund_money_sent_at?: string | null
+    refund_denial_reason?: string | null
   }[],
   childIdBySubmissionAndName: Map<string, string>,
 ): DashboardCamp[] {
   const camps: DashboardCamp[] = []
   for (const row of data) {
     const week = row.camp_session ?? ''
-    const displayStatus = displayStatusForRegistrationRow(row.status, week, row.refund_requested_weeks)
+    const displayStatus = displayStatusForRegistrationRow(row)
     const fn = (row.player_first_name ?? '').trim()
     const ln = (row.player_last_name ?? '').trim()
     const sid = row.registration_submission_id
@@ -142,6 +173,10 @@ function rowsToCamps(
       week,
       registrationStatus: row.status ?? 'pending',
       displayStatus,
+      campCompletedAt: row.camp_completed_at ?? null,
+      refundApprovedAt: row.refund_approved_at ?? null,
+      refundMoneySentAt: row.refund_money_sent_at ?? null,
+      refundDenialReason: row.refund_denial_reason ?? null,
     })
   }
   return camps
@@ -243,6 +278,10 @@ function weekTilesForIncrementalChild(
       if (ds === 'confirmed') return { week, status: 'confirmed' as const, registrationId: rid }
       if (ds === 'refund_requested') return { week, status: 'refund_requested' as const, registrationId: rid }
       if (ds === 'declined') return { week, status: 'declined' as const, registrationId: rid }
+      if (ds === 'completed') return { week, status: 'completed' as const, registrationId: rid }
+      if (ds === 'refund_processing') return { week, status: 'refund_processing' as const, registrationId: rid }
+      if (ds === 'refund_completed') return { week, status: 'refund_completed' as const, registrationId: rid }
+      if (ds === 'refund_denied') return { week, status: 'refund_denied' as const, registrationId: rid }
       return { week, status: 'pending' as const, registrationId: rid }
     }
     if (child.submissionPending && remaining > 0) {
@@ -267,6 +306,16 @@ function weekTilesFromCampsOnly(campsForChild: DashboardCamp[]): DashboardWeekTi
     }
     if (camp.displayStatus === 'declined') {
       return { week, status: 'declined', registrationId: camp.registrationId }
+    }
+    if (camp.displayStatus === 'completed') return { week, status: 'completed', registrationId: camp.registrationId }
+    if (camp.displayStatus === 'refund_processing') {
+      return { week, status: 'refund_processing', registrationId: camp.registrationId }
+    }
+    if (camp.displayStatus === 'refund_completed') {
+      return { week, status: 'refund_completed', registrationId: camp.registrationId }
+    }
+    if (camp.displayStatus === 'refund_denied') {
+      return { week, status: 'refund_denied', registrationId: camp.registrationId }
     }
     return { week, status: 'pending', registrationId: camp.registrationId }
   })
@@ -349,6 +398,10 @@ export async function getDashboardPageData(): Promise<{
       player_last_name,
       refund_requested_weeks,
       registration_submission_id,
+      camp_completed_at,
+      refund_approved_at,
+      refund_money_sent_at,
+      refund_denial_reason,
       created_at
     `,
     )
@@ -462,7 +515,7 @@ export async function getDashboardPageData(): Promise<{
       if (!w) continue
       weekMap.set(w, {
         registrationId: r.id,
-        displayStatus: displayStatusForRegistrationRow(r.status, w, r.refund_requested_weeks),
+        displayStatus: displayStatusForRegistrationRow(r as RegistrationRowForDisplay),
       })
     }
 
@@ -1102,7 +1155,7 @@ export async function requestRefundForCamp(input: {
   const { data: row, error: fetchErr } = await supabase
     .from('registrations')
     .select(
-      'id, user_id, status, camp_session, player_first_name, player_last_name, parent_first_name, parent_last_name, parent_email, refund_requested_weeks',
+      'id, user_id, status, camp_session, player_first_name, player_last_name, parent_first_name, parent_last_name, parent_email, refund_requested_weeks, camp_completed_at',
     )
     .eq('id', input.registrationId)
     .single()
@@ -1112,6 +1165,9 @@ export async function requestRefundForCamp(input: {
   }
   if (row.user_id !== user.id) {
     return { success: false, error: 'Registration not found.' }
+  }
+  if ((row as { camp_completed_at?: string | null }).camp_completed_at) {
+    return { success: false, error: 'This camp week is marked complete; refunds can no longer be requested online.' }
   }
   if ((row.status ?? '').toLowerCase() !== 'confirmed') {
     return { success: false, error: 'Refunds can only be requested for confirmed registrations.' }
@@ -1140,7 +1196,12 @@ export async function requestRefundForCamp(input: {
   const nextRefundWeeks = [...existing, input.week]
   const { error: upErr } = await service
     .from('registrations')
-    .update({ refund_requested_weeks: nextRefundWeeks, refund_denial_reason: null })
+    .update({
+      refund_requested_weeks: nextRefundWeeks,
+      refund_denial_reason: null,
+      refund_approved_at: null,
+      refund_money_sent_at: null,
+    })
     .eq('id', input.registrationId)
 
   if (upErr) {

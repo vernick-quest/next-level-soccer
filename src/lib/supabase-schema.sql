@@ -298,6 +298,9 @@ create unique index if not exists player_reports_child_camp_unique
 
 alter table public.registrations add column if not exists decline_reason text;
 alter table public.registrations add column if not exists refund_denial_reason text;
+alter table public.registrations add column if not exists camp_completed_at timestamptz;
+alter table public.registrations add column if not exists refund_approved_at timestamptz;
+alter table public.registrations add column if not exists refund_money_sent_at timestamptz;
 
 alter table player_reports enable row level security;
 

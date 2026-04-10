@@ -16,6 +16,8 @@ import { REPORT_CARD_CATEGORY_ACCENT } from '@/lib/report-card-ui'
 import {
   listCoachRegistrations,
   listCoachWeekReportRows,
+  markCampWeekCompleted,
+  markRefundMoneySent,
   resolveRefundRequest,
   savePlayerReport,
   setRegistrationDecision,
@@ -211,6 +213,32 @@ export default function CoachPortal({
     })
   }
 
+  function submitMarkCampComplete(id: string) {
+    setMessage(null)
+    startTransition(async () => {
+      const r = await markCampWeekCompleted({ registrationId: id })
+      if (!r.success) {
+        setMessage({ type: 'err', text: r.error })
+        return
+      }
+      setMessage({ type: 'ok', text: 'Camp week marked complete. Parent dashboard updated.' })
+      await refreshRegistrations()
+    })
+  }
+
+  function submitMarkRefundPaid(id: string) {
+    setMessage(null)
+    startTransition(async () => {
+      const r = await markRefundMoneySent({ registrationId: id })
+      if (!r.success) {
+        setMessage({ type: 'err', text: r.error })
+        return
+      }
+      setMessage({ type: 'ok', text: 'Refund marked as sent; parent emailed.' })
+      await refreshRegistrations()
+    })
+  }
+
   function submitReport(childId: string) {
     setMessage(null)
     const scores = scoresFromRecord(scoresFor(childId))
@@ -245,10 +273,16 @@ export default function CoachPortal({
 
   const registrationsNeedingAttention = useMemo(
     () =>
-      registrations.filter(
-        (r) =>
-          (r.status ?? '').toLowerCase() === 'pending' || registrationRefundPending(r),
-      ).length,
+      registrations.filter((r) => {
+        const st = (r.status ?? '').toLowerCase()
+        const refundP = registrationRefundPending(r)
+        const awaitingPayout =
+          st === 'confirmed' &&
+          !!r.refund_approved_at &&
+          !r.refund_money_sent_at &&
+          !refundP
+        return st === 'pending' || refundP || awaitingPayout
+      }).length,
     [registrations],
   )
 
@@ -319,9 +353,10 @@ export default function CoachPortal({
         {tab === 'registrations' && (
           <section className="space-y-4">
             <p className="text-sm text-slate-600">
-              Confirm after payment is received. Use the decline reason box before declining a pending week. For refund
-              requests, approve the refund or decline with a reason — the parent is emailed in each case. Sort by
-              registration date or by child name.
+              Confirm after payment is received. Mark confirmed weeks <strong>complete</strong> after camp ends (parents
+              can no longer request refunds). For refunds: approve or decline with a reason; after you approve, use{' '}
+              <strong>Mark refund sent</strong> when the money has gone out — parents see each step on their dashboard.
+              Sort by registration date or child name.
             </p>
             {registrations.length === 0 ? (
               <div className="bg-white border border-[#e8d8ce] rounded-2xl p-8 text-center text-slate-600">
@@ -359,7 +394,25 @@ export default function CoachPortal({
                     const st = (row.status ?? 'pending').toLowerCase()
                     const rowPending = st === 'pending'
                     const refundPending = registrationRefundPending(row)
-                    const statusLabel = refundPending ? 'refund requested' : st
+                    const refundAwaitingPayout =
+                      st === 'confirmed' &&
+                      !!row.refund_approved_at &&
+                      !row.refund_money_sent_at &&
+                      !refundPending
+                    const completed = !!row.camp_completed_at
+                    const statusLabel = completed
+                      ? 'camp complete'
+                      : row.refund_money_sent_at
+                        ? 'refund completed'
+                        : refundPending
+                          ? 'refund requested'
+                          : refundAwaitingPayout
+                            ? 'refund processing'
+                            : row.refund_denial_reason?.trim()
+                              ? 'refund denied'
+                              : st
+                    const showMarkComplete =
+                      st === 'confirmed' && !completed && !refundPending && !refundAwaitingPayout
                     return (
                       <div
                         key={row.id}
@@ -382,22 +435,40 @@ export default function CoachPortal({
                                 <strong>Decline reason:</strong> {row.decline_reason}
                               </div>
                             ) : null}
-                            {row.refund_denial_reason && !refundPending ? (
-                              <div className="mt-2 text-sm text-violet-900 bg-violet-50 border border-violet-100 rounded-lg px-3 py-2">
+                            {row.refund_denial_reason?.trim() && !refundPending && !row.refund_money_sent_at ? (
+                              <div className="mt-2 text-sm text-rose-900 bg-rose-50 border border-rose-100 rounded-lg px-3 py-2">
                                 <strong>Refund request not approved:</strong> {row.refund_denial_reason}
                               </div>
+                            ) : null}
+                            {completed ? (
+                              <p className="mt-2 text-xs text-teal-800 font-medium">
+                                Camp completed {formatRegistrationDate(row.camp_completed_at!)} — no online refunds.
+                              </p>
+                            ) : null}
+                            {row.refund_money_sent_at ? (
+                              <p className="mt-2 text-xs text-sky-800 font-medium">
+                                Refund recorded as sent {formatRegistrationDate(row.refund_money_sent_at)}.
+                              </p>
                             ) : null}
                           </div>
                           <div className="flex flex-col items-end gap-2 w-full sm:w-auto">
                             <span
                               className={`text-xs font-bold uppercase px-3 py-1 rounded-full ${
-                                refundPending
-                                  ? 'bg-violet-100 text-violet-900'
-                                  : st === 'confirmed'
-                                    ? 'bg-emerald-100 text-emerald-900'
-                                    : st === 'declined'
-                                      ? 'bg-rose-100 text-rose-900'
-                                      : 'bg-amber-100 text-amber-900'
+                                completed
+                                  ? 'bg-teal-100 text-teal-900'
+                                  : row.refund_money_sent_at
+                                    ? 'bg-sky-100 text-sky-900'
+                                    : refundPending
+                                      ? 'bg-violet-100 text-violet-900'
+                                      : refundAwaitingPayout
+                                        ? 'bg-amber-100 text-amber-900'
+                                        : row.refund_denial_reason?.trim()
+                                          ? 'bg-rose-100 text-rose-900'
+                                          : st === 'confirmed'
+                                            ? 'bg-emerald-100 text-emerald-900'
+                                            : st === 'declined'
+                                              ? 'bg-rose-100 text-rose-900'
+                                              : 'bg-amber-100 text-amber-900'
                               }`}
                             >
                               {statusLabel}
@@ -476,6 +547,38 @@ export default function CoachPortal({
                                     className="mt-1 w-full border border-[#e8d8ce] rounded-xl px-3 py-2 text-sm resize-y min-h-[4.5rem]"
                                   />
                                 </label>
+                              </div>
+                            )}
+                            {refundAwaitingPayout && (
+                              <div className="w-full sm:max-w-md mt-1 border-t border-[#f0e2d9] pt-3 flex flex-col items-end gap-2">
+                                <p className="text-xs text-slate-600 text-left w-full">
+                                  Refund was approved. After you send the money (Zelle/Venmo/check), confirm here so the
+                                  parent sees &ldquo;refund completed&rdquo; on their dashboard.
+                                </p>
+                                <button
+                                  type="button"
+                                  onClick={() => submitMarkRefundPaid(row.id)}
+                                  disabled={isPending}
+                                  className="shrink-0 text-sm font-bold bg-[#062744] hover:bg-[#041f36] text-white px-4 py-2 rounded-full disabled:opacity-50"
+                                >
+                                  Mark refund sent
+                                </button>
+                              </div>
+                            )}
+                            {showMarkComplete && (
+                              <div className="w-full sm:max-w-md mt-1 border-t border-[#f0e2d9] pt-3 flex flex-col items-end gap-2">
+                                <p className="text-xs text-slate-600 text-left w-full">
+                                  After this camp week has finished, mark it complete. Parents can no longer request
+                                  refunds online for this week.
+                                </p>
+                                <button
+                                  type="button"
+                                  onClick={() => submitMarkCampComplete(row.id)}
+                                  disabled={isPending}
+                                  className="shrink-0 text-sm font-bold border-2 border-teal-600 text-teal-900 hover:bg-teal-50 px-4 py-2 rounded-full disabled:opacity-50"
+                                >
+                                  Mark camp week complete
+                                </button>
                               </div>
                             )}
                           </div>
