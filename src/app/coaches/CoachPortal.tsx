@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState, useTransition } from 'react'
+import { useCallback, useMemo, useState, useTransition } from 'react'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
 import { CAMP_SESSIONS } from '@/lib/camp-weeks'
@@ -11,9 +11,12 @@ import {
   REPORT_METRIC_GROUPS,
   type CoachReportMetricKey,
 } from '@/lib/player-report-metrics'
+import { registrationRefundPending } from '@/lib/registration-refund-pending'
 import { REPORT_CARD_CATEGORY_ACCENT } from '@/lib/report-card-ui'
 import {
+  listCoachRegistrations,
   listCoachWeekReportRows,
+  resolveRefundRequest,
   savePlayerReport,
   setRegistrationDecision,
   type CoachRegistrationRow,
@@ -37,6 +40,13 @@ function scoresFromRecord(r: Record<CoachReportMetricKey, '' | number>): Record<
   return out
 }
 
+function formatRegistrationDate(iso: string) {
+  if (!iso) return '—'
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return '—'
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+}
+
 export default function CoachPortal({
   initialRegistrations,
   initialWeekPlayers,
@@ -51,12 +61,40 @@ export default function CoachPortal({
   const [expandedChild, setExpandedChild] = useState<string | null>(null)
   const [scoresByChild, setScoresByChild] = useState<Record<string, Record<CoachReportMetricKey, '' | number>>>({})
   const [commentsByChild, setCommentsByChild] = useState<Record<string, string>>({})
-  const [declineId, setDeclineId] = useState<string | null>(null)
-  const [declineReason, setDeclineReason] = useState('')
+  const [declineReasons, setDeclineReasons] = useState<Record<string, string>>({})
+  const [refundDeclineReasons, setRefundDeclineReasons] = useState<Record<string, string>>({})
+  const [sortRegistrationsBy, setSortRegistrationsBy] = useState<'date' | 'child'>('date')
   const [message, setMessage] = useState<{ type: 'ok' | 'err'; text: string } | null>(null)
   const [isPending, startTransition] = useTransition()
 
   const playersForWeek = weekPlayersMap[campSession] ?? []
+
+  const refreshRegistrations = useCallback(async () => {
+    const { rows, error } = await listCoachRegistrations()
+    if (!error) setRegistrations(rows)
+  }, [])
+
+  const sortedRegistrations = useMemo(() => {
+    const list = [...registrations]
+    if (sortRegistrationsBy === 'child') {
+      list.sort((a, b) => {
+        const ln = (a.player_last_name ?? '').localeCompare(b.player_last_name ?? '')
+        if (ln !== 0) return ln
+        const fn = (a.player_first_name ?? '').localeCompare(b.player_first_name ?? '')
+        if (fn !== 0) return fn
+        return new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+      })
+    } else {
+      list.sort((a, b) => {
+        const t = new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+        if (t !== 0) return t
+        const ln = (a.player_last_name ?? '').localeCompare(b.player_last_name ?? '')
+        if (ln !== 0) return ln
+        return (a.player_first_name ?? '').localeCompare(b.player_first_name ?? '')
+      })
+    }
+    return list
+  }, [registrations, sortRegistrationsBy])
 
   function scoresFor(childId: string) {
     return scoresByChild[childId] ?? emptyScores()
@@ -97,13 +135,14 @@ export default function CoachPortal({
       )
       setMessage({ type: 'ok', text: 'Confirmed and parent emailed.' })
       await refreshWeekPlayers(campSession)
+      await refreshRegistrations()
     })
   }
 
   function submitDecline(id: string) {
-    const reason = declineReason.trim()
+    const reason = (declineReasons[id] ?? '').trim()
     if (!reason) {
-      setMessage({ type: 'err', text: 'Enter a decline reason for the parent email.' })
+      setMessage({ type: 'err', text: 'Enter a decline reason in the text box before declining.' })
       return
     }
     setMessage(null)
@@ -117,12 +156,58 @@ export default function CoachPortal({
         setMessage({ type: 'err', text: r.error })
         return
       }
-      setRegistrations((rows) =>
-        rows.map((x) => (x.id === id ? { ...x, status: 'declined', decline_reason: reason } : x)),
-      )
-      setDeclineId(null)
-      setDeclineReason('')
+      setDeclineReasons((prev) => {
+        const next = { ...prev }
+        delete next[id]
+        return next
+      })
       setMessage({ type: 'ok', text: 'Declined and parent emailed.' })
+      await refreshRegistrations()
+    })
+  }
+
+  function approveRefund(id: string) {
+    setMessage(null)
+    startTransition(async () => {
+      const r = await resolveRefundRequest({ registrationId: id, decision: 'approved' })
+      if (!r.success) {
+        setMessage({ type: 'err', text: r.error })
+        return
+      }
+      setRefundDeclineReasons((prev) => {
+        const next = { ...prev }
+        delete next[id]
+        return next
+      })
+      setMessage({ type: 'ok', text: 'Refund approved and parent emailed.' })
+      await refreshRegistrations()
+    })
+  }
+
+  function submitRefundDecline(id: string) {
+    const reason = (refundDeclineReasons[id] ?? '').trim()
+    if (!reason) {
+      setMessage({ type: 'err', text: 'Enter a reason before declining this refund request.' })
+      return
+    }
+    setMessage(null)
+    startTransition(async () => {
+      const r = await resolveRefundRequest({
+        registrationId: id,
+        decision: 'declined',
+        declineReason: reason,
+      })
+      if (!r.success) {
+        setMessage({ type: 'err', text: r.error })
+        return
+      }
+      setRefundDeclineReasons((prev) => {
+        const next = { ...prev }
+        delete next[id]
+        return next
+      })
+      setMessage({ type: 'ok', text: 'Refund decline sent to parent by email.' })
+      await refreshRegistrations()
     })
   }
 
@@ -158,8 +243,12 @@ export default function CoachPortal({
     })
   }
 
-  const pendingCount = useMemo(
-    () => registrations.filter((r) => (r.status ?? '').toLowerCase() === 'pending').length,
+  const registrationsNeedingAttention = useMemo(
+    () =>
+      registrations.filter(
+        (r) =>
+          (r.status ?? '').toLowerCase() === 'pending' || registrationRefundPending(r),
+      ).length,
     [registrations],
   )
 
@@ -200,8 +289,8 @@ export default function CoachPortal({
             }`}
           >
             Registrations
-            {pendingCount > 0 ? (
-              <span className="ml-1.5 text-xs opacity-90">({pendingCount} pending)</span>
+            {registrationsNeedingAttention > 0 ? (
+              <span className="ml-1.5 text-xs opacity-90">({registrationsNeedingAttention} need action)</span>
             ) : null}
           </button>
           <button
@@ -230,112 +319,172 @@ export default function CoachPortal({
         {tab === 'registrations' && (
           <section className="space-y-4">
             <p className="text-sm text-slate-600">
-              Confirm after payment is received. Decline if the week is full or payment was not received — the parent
-              gets an email with your reason and can try again later if space opens up.
+              Confirm after payment is received. Use the decline reason box before declining a pending week. For refund
+              requests, approve the refund or decline with a reason — the parent is emailed in each case. Sort by
+              registration date or by child name.
             </p>
             {registrations.length === 0 ? (
               <div className="bg-white border border-[#e8d8ce] rounded-2xl p-8 text-center text-slate-600">
                 No registration rows found.
               </div>
             ) : (
-              <div className="space-y-3">
-                {registrations.map((row) => {
-                  const st = (row.status ?? 'pending').toLowerCase()
-                  const rowPending = st === 'pending'
-                  return (
-                    <div
-                      key={row.id}
-                      className="bg-white border border-[#e8d8ce] rounded-2xl p-4 sm:p-5 shadow-sm"
-                    >
-                      <div className="flex flex-wrap items-start justify-between gap-3">
-                        <div>
-                          <div className="font-bold text-[#062744]">
-                            {row.player_first_name} {row.player_last_name}
-                          </div>
-                          <div className="text-sm text-slate-600 mt-1">{campNameFromWeekLabel(row.camp_session)}</div>
-                          <div className="text-xs text-slate-500 mt-1">
-                            {row.parent_first_name} {row.parent_last_name} · {row.parent_email}
-                          </div>
-                          {st === 'declined' && row.decline_reason ? (
-                            <div className="mt-2 text-sm text-rose-800 bg-rose-50 border border-rose-100 rounded-lg px-3 py-2">
-                              <strong>Decline reason:</strong> {row.decline_reason}
+              <>
+                <div className="flex flex-wrap items-center gap-2 mb-4">
+                  <span className="text-xs font-semibold text-slate-600">Sort:</span>
+                  <button
+                    type="button"
+                    onClick={() => setSortRegistrationsBy('date')}
+                    className={`text-xs font-bold px-3 py-1.5 rounded-full border transition-colors ${
+                      sortRegistrationsBy === 'date'
+                        ? 'bg-[#062744] text-white border-[#062744]'
+                        : 'bg-white text-[#213c57] border-[#e8d8ce] hover:bg-[#fffaf5]'
+                    }`}
+                  >
+                    By registration date
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSortRegistrationsBy('child')}
+                    className={`text-xs font-bold px-3 py-1.5 rounded-full border transition-colors ${
+                      sortRegistrationsBy === 'child'
+                        ? 'bg-[#062744] text-white border-[#062744]'
+                        : 'bg-white text-[#213c57] border-[#e8d8ce] hover:bg-[#fffaf5]'
+                    }`}
+                  >
+                    By child
+                  </button>
+                </div>
+                <div className="space-y-3">
+                  {sortedRegistrations.map((row) => {
+                    const st = (row.status ?? 'pending').toLowerCase()
+                    const rowPending = st === 'pending'
+                    const refundPending = registrationRefundPending(row)
+                    const statusLabel = refundPending ? 'refund requested' : st
+                    return (
+                      <div
+                        key={row.id}
+                        className="bg-white border border-[#e8d8ce] rounded-2xl p-4 sm:p-5 shadow-sm"
+                      >
+                        <div className="flex flex-wrap items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <div className="font-bold text-[#062744]">
+                              {row.player_first_name} {row.player_last_name}
                             </div>
-                          ) : null}
-                        </div>
-                        <div className="flex flex-col items-end gap-2">
-                          <span
-                            className={`text-xs font-bold uppercase px-3 py-1 rounded-full ${
-                              st === 'confirmed'
-                                ? 'bg-emerald-100 text-emerald-900'
-                                : st === 'declined'
-                                  ? 'bg-rose-100 text-rose-900'
-                                  : st === 'refund_requested'
-                                    ? 'bg-violet-100 text-violet-900'
-                                    : 'bg-amber-100 text-amber-900'
-                            }`}
-                          >
-                            {st}
-                          </span>
-                          {rowPending && (
-                            <div className="flex flex-wrap gap-2 justify-end">
-                              <button
-                                type="button"
-                                onClick={() => confirmRegistration(row.id)}
-                                disabled={isPending}
-                                className="text-sm font-bold bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-full disabled:opacity-50"
-                              >
-                                Confirm
-                              </button>
-                              {declineId === row.id ? (
-                                <div className="w-full sm:w-auto flex flex-col gap-2 min-w-[14rem]">
-                                  <textarea
-                                    value={declineReason}
-                                    onChange={(e) => setDeclineReason(e.target.value)}
-                                    rows={3}
-                                    placeholder="Reason (emailed to parent)…"
-                                    className="w-full border border-[#e8d8ce] rounded-xl px-3 py-2 text-sm"
-                                  />
-                                  <div className="flex gap-2">
-                                    <button
-                                      type="button"
-                                      onClick={() => submitDecline(row.id)}
-                                      disabled={isPending}
-                                      className="text-sm font-bold bg-rose-600 hover:bg-rose-700 text-white px-4 py-2 rounded-full disabled:opacity-50"
-                                    >
-                                      Send decline
-                                    </button>
-                                    <button
-                                      type="button"
-                                      onClick={() => {
-                                        setDeclineId(null)
-                                        setDeclineReason('')
-                                      }}
-                                      className="text-sm font-semibold text-slate-600 px-3"
-                                    >
-                                      Cancel
-                                    </button>
-                                  </div>
+                            <div className="text-sm text-slate-600 mt-1">{campNameFromWeekLabel(row.camp_session)}</div>
+                            <div className="text-xs text-slate-500 mt-0.5">
+                              Registered {formatRegistrationDate(row.created_at)}
+                            </div>
+                            <div className="text-xs text-slate-500 mt-1">
+                              {row.parent_first_name} {row.parent_last_name} · {row.parent_email}
+                            </div>
+                            {st === 'declined' && row.decline_reason ? (
+                              <div className="mt-2 text-sm text-rose-800 bg-rose-50 border border-rose-100 rounded-lg px-3 py-2">
+                                <strong>Decline reason:</strong> {row.decline_reason}
+                              </div>
+                            ) : null}
+                            {row.refund_denial_reason && !refundPending ? (
+                              <div className="mt-2 text-sm text-violet-900 bg-violet-50 border border-violet-100 rounded-lg px-3 py-2">
+                                <strong>Refund request not approved:</strong> {row.refund_denial_reason}
+                              </div>
+                            ) : null}
+                          </div>
+                          <div className="flex flex-col items-end gap-2 w-full sm:w-auto">
+                            <span
+                              className={`text-xs font-bold uppercase px-3 py-1 rounded-full ${
+                                refundPending
+                                  ? 'bg-violet-100 text-violet-900'
+                                  : st === 'confirmed'
+                                    ? 'bg-emerald-100 text-emerald-900'
+                                    : st === 'declined'
+                                      ? 'bg-rose-100 text-rose-900'
+                                      : 'bg-amber-100 text-amber-900'
+                              }`}
+                            >
+                              {statusLabel}
+                            </span>
+                            {rowPending && (
+                              <div className="w-full sm:max-w-md mt-1 flex flex-col items-end gap-3">
+                                <div className="flex flex-wrap gap-2 justify-end">
+                                  <button
+                                    type="button"
+                                    onClick={() => confirmRegistration(row.id)}
+                                    disabled={isPending}
+                                    className="shrink-0 text-sm font-bold bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-full disabled:opacity-50"
+                                  >
+                                    Confirm
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => submitDecline(row.id)}
+                                    disabled={isPending || !(declineReasons[row.id] ?? '').trim()}
+                                    className="shrink-0 text-sm font-bold bg-rose-600 hover:bg-rose-700 text-white px-4 py-2 rounded-full disabled:opacity-50"
+                                  >
+                                    Decline
+                                  </button>
                                 </div>
-                              ) : (
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    setDeclineId(row.id)
-                                    setDeclineReason('')
-                                  }}
-                                  className="text-sm font-bold border-2 border-rose-400 text-rose-800 hover:bg-rose-50 px-4 py-2 rounded-full"
-                                >
-                                  Decline
-                                </button>
-                              )}
-                            </div>
-                          )}
+                                <label className="block w-full text-left sm:text-right">
+                                  <span className="text-xs font-semibold text-slate-600">
+                                    Decline reason (required if you decline — emailed to parent)
+                                  </span>
+                                  <textarea
+                                    value={declineReasons[row.id] ?? ''}
+                                    onChange={(e) =>
+                                      setDeclineReasons((prev) => ({ ...prev, [row.id]: e.target.value }))
+                                    }
+                                    rows={3}
+                                    placeholder="e.g. Week is full, or payment not received…"
+                                    className="mt-1 w-full border border-[#e8d8ce] rounded-xl px-3 py-2 text-sm resize-y min-h-[4.5rem]"
+                                  />
+                                </label>
+                              </div>
+                            )}
+                            {refundPending && (
+                              <div className="w-full sm:max-w-md mt-1 border-t border-[#f0e2d9] pt-3 flex flex-col items-end gap-3">
+                                <p className="text-xs text-slate-600 text-left w-full">
+                                  Parent requested a refund for this confirmed week. Approve to confirm you will process
+                                  it, or decline with a reason (emailed to parent).
+                                </p>
+                                <div className="flex flex-wrap gap-2 justify-end">
+                                  <button
+                                    type="button"
+                                    onClick={() => approveRefund(row.id)}
+                                    disabled={isPending}
+                                    className="shrink-0 text-sm font-bold bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-full disabled:opacity-50"
+                                  >
+                                    Approve refund
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => submitRefundDecline(row.id)}
+                                    disabled={isPending || !(refundDeclineReasons[row.id] ?? '').trim()}
+                                    className="shrink-0 text-sm font-bold border-2 border-rose-400 text-rose-800 hover:bg-rose-50 px-4 py-2 rounded-full disabled:opacity-50"
+                                  >
+                                    Decline refund
+                                  </button>
+                                </div>
+                                <label className="block w-full text-left sm:text-right">
+                                  <span className="text-xs font-semibold text-slate-600">
+                                    Reason if declining refund (required to decline)
+                                  </span>
+                                  <textarea
+                                    value={refundDeclineReasons[row.id] ?? ''}
+                                    onChange={(e) =>
+                                      setRefundDeclineReasons((prev) => ({ ...prev, [row.id]: e.target.value }))
+                                    }
+                                    rows={3}
+                                    placeholder="Explain why the refund cannot be approved…"
+                                    className="mt-1 w-full border border-[#e8d8ce] rounded-xl px-3 py-2 text-sm resize-y min-h-[4.5rem]"
+                                  />
+                                </label>
+                              </div>
+                            )}
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  )
-                })}
-              </div>
+                    )
+                  })}
+                </div>
+              </>
             )}
           </section>
         )}

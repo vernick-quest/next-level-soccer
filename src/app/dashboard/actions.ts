@@ -1140,7 +1140,7 @@ export async function requestRefundForCamp(input: {
   const nextRefundWeeks = [...existing, input.week]
   const { error: upErr } = await service
     .from('registrations')
-    .update({ refund_requested_weeks: nextRefundWeeks })
+    .update({ refund_requested_weeks: nextRefundWeeks, refund_denial_reason: null })
     .eq('id', input.registrationId)
 
   if (upErr) {

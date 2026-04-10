@@ -50,6 +50,48 @@ export function htmlRegistrationDeclined(params: {
   </div>`
 }
 
+export function htmlRefundApproved(params: {
+  parentFirstName: string
+  playerName: string
+  campWeekLabel: string
+}) {
+  const { parentFirstName, playerName, campWeekLabel } = params
+  return `
+  <div style="font-family: system-ui, sans-serif; max-width: 560px; line-height: 1.55; color: #1e293b;">
+    <h1 style="color: #062744; font-size: 22px;">Refund request approved</h1>
+    <p>Hi ${escapeHtml(parentFirstName)},</p>
+    <p>
+      We have approved your refund request for <strong>${escapeHtml(playerName)}</strong> for
+      <strong>${escapeHtml(campWeekLabel)}</strong>. Our team will process it and follow up if we need anything else.
+    </p>
+    <p>If you have questions, reply to this email.</p>
+    <p style="margin-top: 2rem; color: #64748b; font-size: 14px;">— Next Level Soccer SF</p>
+  </div>`
+}
+
+export function htmlRefundDeclined(params: {
+  parentFirstName: string
+  playerName: string
+  campWeekLabel: string
+  reason: string
+}) {
+  const { parentFirstName, playerName, campWeekLabel, reason } = params
+  return `
+  <div style="font-family: system-ui, sans-serif; max-width: 560px; line-height: 1.55; color: #1e293b;">
+    <h1 style="color: #062744; font-size: 22px;">Update on your refund request</h1>
+    <p>Hi ${escapeHtml(parentFirstName)},</p>
+    <p>
+      We are unable to approve the refund request for <strong>${escapeHtml(playerName)}</strong> for
+      <strong>${escapeHtml(campWeekLabel)}</strong> at this time.
+    </p>
+    <p style="background: #fff7ed; border: 1px solid #fed7aa; border-radius: 12px; padding: 12px 14px;">
+      <strong>Reason:</strong><br/>${escapeHtml(reason)}
+    </p>
+    <p>Your registration for this week remains active unless we have contacted you separately. Reply to this email with questions.</p>
+    <p style="margin-top: 2rem; color: #64748b; font-size: 14px;">— Next Level Soccer SF</p>
+  </div>`
+}
+
 export function htmlParentWeeklyReport(params: {
   parentFirstName: string
   childName: string

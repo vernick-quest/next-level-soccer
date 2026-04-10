@@ -4,6 +4,8 @@ import { Resend } from 'resend'
 import { getStaffAdminUser } from '@/lib/admin'
 import {
   htmlParentWeeklyReport,
+  htmlRefundApproved,
+  htmlRefundDeclined,
   htmlRegistrationConfirmed,
   htmlRegistrationDeclined,
 } from '@/lib/coach-portal-emails'
@@ -40,6 +42,8 @@ export type CoachRegistrationRow = {
   camp_session: string
   status: string | null
   decline_reason: string | null
+  refund_requested_weeks: string[] | null
+  refund_denial_reason: string | null
   player_first_name: string | null
   player_last_name: string | null
   parent_first_name: string | null
@@ -138,6 +142,8 @@ export async function listCoachRegistrations(): Promise<{
       camp_session,
       status,
       decline_reason,
+      refund_requested_weeks,
+      refund_denial_reason,
       player_first_name,
       player_last_name,
       parent_first_name,
@@ -146,7 +152,7 @@ export async function listCoachRegistrations(): Promise<{
       registration_submission_id
     `,
     )
-    .order('created_at', { ascending: false })
+    .order('created_at', { ascending: true })
 
   if (error) {
     console.error('listCoachRegistrations:', error)
@@ -159,6 +165,8 @@ export async function listCoachRegistrations(): Promise<{
     camp_session: r.camp_session ?? '',
     status: r.status ?? null,
     decline_reason: r.decline_reason ?? null,
+    refund_requested_weeks: (r.refund_requested_weeks as string[] | null) ?? null,
+    refund_denial_reason: (r as { refund_denial_reason?: string | null }).refund_denial_reason ?? null,
     player_first_name: r.player_first_name,
     player_last_name: r.player_last_name,
     parent_first_name: r.parent_first_name,
@@ -366,6 +374,111 @@ export async function setRegistrationDecision(input: {
     }
   } else {
     console.warn('setRegistrationDecision: missing RESEND_API_KEY or parent email; skip notification.')
+  }
+
+  return { success: true }
+}
+
+export type ResolveRefundResult = { success: true } | { success: false; error: string }
+
+export async function resolveRefundRequest(input: {
+  registrationId: string
+  decision: 'approved' | 'declined'
+  declineReason?: string
+}): Promise<ResolveRefundResult> {
+  const staffUser = await getStaffAdminUser()
+  if (!staffUser) {
+    return { success: false, error: 'You must be signed in as staff.' }
+  }
+
+  const reason = (input.declineReason ?? '').trim()
+  if (input.decision === 'declined' && !reason) {
+    return { success: false, error: 'Please enter a reason when declining a refund request.' }
+  }
+
+  let service: ReturnType<typeof createServiceRoleClient>
+  try {
+    service = createServiceRoleClient()
+  } catch {
+    return { success: false, error: 'Server configuration is incomplete.' }
+  }
+
+  const { data: row, error: fetchErr } = await service
+    .from('registrations')
+    .select(
+      'id, parent_email, parent_first_name, player_first_name, player_last_name, camp_session, status, refund_requested_weeks',
+    )
+    .eq('id', input.registrationId)
+    .single()
+
+  if (fetchErr || !row) {
+    return { success: false, error: 'Registration not found.' }
+  }
+
+  if ((row.status ?? '').toLowerCase() !== 'confirmed') {
+    return { success: false, error: 'Refund actions only apply to confirmed registrations.' }
+  }
+
+  const campSession = trimName(row.camp_session)
+  const refunds = (row.refund_requested_weeks as string[] | null) ?? []
+  if (!campSession || !refunds.some((w) => trimName(w) === campSession)) {
+    return { success: false, error: 'No refund request is pending for this camp week.' }
+  }
+
+  const nextRefundWeeks = refunds.filter((w) => trimName(w) !== campSession)
+  const { error: upErr } = await service
+    .from('registrations')
+    .update({
+      refund_requested_weeks: nextRefundWeeks,
+      refund_denial_reason: input.decision === 'declined' ? reason : null,
+    })
+    .eq('id', input.registrationId)
+
+  if (upErr) {
+    console.error('resolveRefundRequest:', upErr)
+    return { success: false, error: 'Could not update registration.' }
+  }
+
+  const apiKey = process.env.RESEND_API_KEY
+  const parentEmail = (row.parent_email ?? '').trim()
+  const parentFirst = (row.parent_first_name ?? '').trim() || 'there'
+  const playerName = `${row.player_first_name ?? ''} ${row.player_last_name ?? ''}`.trim()
+  const weekLabel = campNameFromWeekLabel(campSession)
+
+  if (apiKey && parentEmail) {
+    const resend = new Resend(apiKey)
+    if (input.decision === 'approved') {
+      const html = htmlRefundApproved({
+        parentFirstName: parentFirst,
+        playerName,
+        campWeekLabel: weekLabel,
+      })
+      const { error: sendErr } = await resend.emails.send({
+        from: SENDER_EMAIL,
+        replyTo: REPLY_TO_EMAIL,
+        to: parentEmail,
+        subject: `Refund approved: ${playerName} — ${weekLabel} — Next Level Soccer SF`,
+        html,
+      })
+      if (sendErr) console.error('resolveRefundRequest approve email:', sendErr)
+    } else {
+      const html = htmlRefundDeclined({
+        parentFirstName: parentFirst,
+        playerName,
+        campWeekLabel: weekLabel,
+        reason,
+      })
+      const { error: sendErr } = await resend.emails.send({
+        from: SENDER_EMAIL,
+        replyTo: REPLY_TO_EMAIL,
+        to: parentEmail,
+        subject: `Refund request update: ${playerName} — ${weekLabel} — Next Level Soccer SF`,
+        html,
+      })
+      if (sendErr) console.error('resolveRefundRequest decline email:', sendErr)
+    }
+  } else {
+    console.warn('resolveRefundRequest: missing RESEND_API_KEY or parent email; skip notification.')
   }
 
   return { success: true }

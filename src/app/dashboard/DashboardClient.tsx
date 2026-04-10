@@ -215,7 +215,6 @@ export default function DashboardClient({
                 <ChildDashboardPanel
                   child={activeChild}
                   incrementalChild={incrementalChild}
-                  weekRemaining={incremental?.weekRemaining ?? {}}
                   refundWindowOpen={refundWindowOpen}
                   canSubmitIncremental={canSubmitIncremental}
                   showPaidFamilyBanner={showPaidFamilyBanner}
