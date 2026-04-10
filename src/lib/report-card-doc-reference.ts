@@ -1,64 +1,53 @@
 /**
- * Parent-facing report card copy — synced from Google Doc “Next Level Soccer Report Card”
- * (https://docs.google.com/document/d/1HK5gSus2teh3mf7gASerjsuz8RGe4UutVZtDgDkT9h0/edit)
- * Update this file when the doc changes. Coach scoring in the app uses related criteria in `player-report-metrics.ts`.
+ * Parent-facing report card copy for `/report-card-skills`.
+ * Coach scoring in the app uses related criteria in `player-report-metrics.ts`.
  */
-
-export const REPORT_CARD_DOC_URL =
-  'https://docs.google.com/document/d/1HK5gSus2teh3mf7gASerjsuz8RGe4UutVZtDgDkT9h0/edit?usp=sharing'
 
 export type DocRatingRow = {
   value: 1 | 2 | 3 | 4 | 5
-  /** Short label from doc (Rating column) */
+  /** Single kid-friendly word for the scale (swatch + headings) */
   label: string
-  /** Definition row from doc */
-  definition: string
-  /** “Meaning for Competitive Player” from doc */
+  /** Longer explanation (no “expectations” framing) */
   meaning: string
   /** Tailwind classes for parent-facing color key */
   swatchClassName: string
 }
 
-/** Competitive Soccer Rating Scale (1 to 5) — order 1 = lowest, 5 = highest */
+/** Rating scale 1 = lowest, 5 = highest — one-word labels for kids */
 export const REPORT_CARD_RATING_SCALE_DOC: DocRatingRow[] = [
   {
     value: 1,
     label: 'Emerging',
-    definition: 'Needs Significant Development',
     meaning:
-      'The player shows only a foundational or emerging understanding of the skill. They rarely execute it successfully and need dedicated, fundamental training to develop competence.',
+      'You’re just starting to learn this skill. It’s okay — keep practicing the basics until it feels more natural.',
     swatchClassName: 'bg-[#fecaca] text-[#7f1d1d] border border-[#f87171]',
   },
   {
     value: 2,
     label: 'Developing',
-    definition: 'Below Expectations',
     meaning:
-      'The player attempts the skill but is inconsistent in its execution, often requiring extra time or space to perform it successfully. This area requires focused practice and development.',
+      'You try the skill but it’s not steady yet. Extra time and space help — keep working on it in drills and games.',
     swatchClassName: 'bg-[#fed7aa] text-[#9a3412] border border-[#fb923c]',
   },
   {
     value: 3,
     label: 'Standard',
-    definition: 'Meeting Expectations',
     meaning:
-      'The player consistently performs the skill at an acceptable level for competitive middle school soccer. They understand the concept and can execute it in typical game situations, but may lose consistency under high pressure.',
+      'You can do this skill at a solid level for your team. You get it in normal play; it may get harder when the game speeds up.',
     swatchClassName: 'bg-[#fef9c3] text-[#854d0e] border border-[#eab308]',
   },
   {
     value: 4,
     label: 'Strong',
-    definition: 'Above Expectations',
     meaning:
-      'The player reliably and effectively executes the skill under normal to moderate pressure. They are a consistent positive contributor to the team’s performance in this area.',
+      'You do this skill well under most pressure and help your team in this area on a regular basis.',
     swatchClassName: 'bg-[#d1fae5] text-[#065f46] border border-[#34d399]',
   },
   {
     value: 5,
     label: 'Elite',
-    definition: 'Exceeds Expectations',
     meaning:
-      'The player consistently and effectively executes the skill at a high speed, under intense pressure, and demonstrates clear superiority in this area relative to their peers. They often make game-changing plays using this skill.',
+      'You perform this skill at a high level even when it’s fast and tough. You often stand out and make big plays here.',
     swatchClassName: 'bg-[#a7f3d0] text-[#064e3b] border border-[#059669]',
   },
 ]

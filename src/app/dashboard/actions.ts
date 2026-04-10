@@ -9,6 +9,7 @@ import { createServiceRoleClient } from '@/lib/supabase/service'
 import { getOwnerEmail } from '@/lib/admin'
 import { getWeekSpotUsage, validateCampWeekCapacityForSubmission } from '@/lib/home-camp-spots'
 import { isRefundWindowOpenPacific } from '@/lib/refund-deadline'
+import { ALL_REPORT_METRIC_KEYS, type ReportMetricKey } from '@/lib/player-report-metrics'
 
 const CAMP_PRICE_CENTS = 35_000
 const KNOWN_WEEKS = new Set<string>(CAMP_SESSIONS)
@@ -16,6 +17,8 @@ const KNOWN_WEEKS = new Set<string>(CAMP_SESSIONS)
 /** One row in `public.registrations` (camp week + player). */
 export type DashboardCamp = {
   registrationId: string
+  /** `registration_children.id` when this row links to a submission child; used for photo updates. */
+  registrationChildId: string | null
   childName: string
   childPhotoUrl: string | null
   /** Same as `camp_session` in the database. */
@@ -38,6 +41,41 @@ export type DashboardIncrementalChild = {
   }[]
 }
 
+/** Camp week tile for the child-centric dashboard. */
+export type DashboardWeekStatus =
+  | 'confirmed'
+  | 'pending'
+  | 'refund_requested'
+  | 'addable'
+  | 'full'
+  | 'unavailable'
+
+export type DashboardWeekTile = {
+  week: string
+  status: DashboardWeekStatus
+  registrationId: string | null
+}
+
+export type DashboardReportSnapshot = {
+  id: string
+  scores: Record<ReportMetricKey, number>
+  coachComments: string | null
+  dateGenerated: string
+}
+
+/** One tab: one registered child (or legacy grouped camps). */
+export type DashboardChildView = {
+  registrationChildId: string | null
+  submissionId: string | null
+  firstName: string
+  lastName: string
+  photoUrl: string | null
+  submissionPending: boolean
+  weeks: DashboardWeekTile[]
+  /** Key = camp_session label or `__legacy__` when DB row has no camp_session. */
+  reportsByWeekKey: Record<string, DashboardReportSnapshot>
+}
+
 function displayStatusForRegistrationRow(
   status: string | null | undefined,
   week: string,
@@ -52,6 +90,23 @@ function displayStatusForRegistrationRow(
   return 'pending'
 }
 
+function childIdMapFromRegistrationChildren(
+  regChildren: {
+    id: string
+    submission_id: string
+    player_first_name: string | null
+    player_last_name: string | null
+  }[],
+): Map<string, string> {
+  const m = new Map<string, string>()
+  for (const c of regChildren) {
+    const fn = (c.player_first_name ?? '').trim()
+    const ln = (c.player_last_name ?? '').trim()
+    m.set(`${c.submission_id}|${fn}|${ln}`, c.id)
+  }
+  return m
+}
+
 function rowsToCamps(
   data: {
     id: string
@@ -61,14 +116,25 @@ function rowsToCamps(
     player_first_name: string | null
     player_last_name: string | null
     refund_requested_weeks: string[] | null
+    registration_submission_id: string | null
   }[],
+  childIdBySubmissionAndName: Map<string, string>,
 ): DashboardCamp[] {
   const camps: DashboardCamp[] = []
   for (const row of data) {
     const week = row.camp_session ?? ''
     const displayStatus = displayStatusForRegistrationRow(row.status, week, row.refund_requested_weeks)
+    const fn = (row.player_first_name ?? '').trim()
+    const ln = (row.player_last_name ?? '').trim()
+    const sid = row.registration_submission_id
+    const regChildKey = sid ? `${sid}|${fn}|${ln}` : ''
+    const registrationChildId =
+      regChildKey && childIdBySubmissionAndName.has(regChildKey)
+        ? childIdBySubmissionAndName.get(regChildKey)!
+        : null
     camps.push({
       registrationId: row.id,
+      registrationChildId,
       childName: `${row.player_first_name ?? ''} ${row.player_last_name ?? ''}`.trim(),
       childPhotoUrl: row.child_photo_url ?? null,
       week,
@@ -79,16 +145,190 @@ function rowsToCamps(
   return camps
 }
 
+function isHttpsPhotoUrl(url: string): boolean {
+  try {
+    const u = new URL(url)
+    return u.protocol === 'https:'
+  } catch {
+    return false
+  }
+}
+
+type PlayerReportDbRow = {
+  id: string
+  registration_child_id: string
+  camp_session: string | null
+  coach_comments: string | null
+  date_generated: string
+} & Record<ReportMetricKey, number>
+
+function reportRowToSnapshot(row: PlayerReportDbRow): DashboardReportSnapshot {
+  const scores = {} as Record<ReportMetricKey, number>
+  for (const k of ALL_REPORT_METRIC_KEYS) {
+    scores[k] = row[k] as number
+  }
+  return {
+    id: row.id,
+    scores,
+    coachComments: row.coach_comments,
+    dateGenerated: row.date_generated,
+  }
+}
+
+function mergeReportsByWeek(rows: PlayerReportDbRow[]): Record<string, DashboardReportSnapshot> {
+  const best = new Map<string, PlayerReportDbRow>()
+  for (const r of rows) {
+    const key = r.camp_session?.trim() || '__legacy__'
+    const prev = best.get(key)
+    if (!prev || new Date(r.date_generated) >= new Date(prev.date_generated)) {
+      best.set(key, r)
+    }
+  }
+  const out: Record<string, DashboardReportSnapshot> = {}
+  for (const [k, r] of best) {
+    out[k] = reportRowToSnapshot(r)
+  }
+  return out
+}
+
+async function fetchParentReportsMap(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  childIds: string[],
+): Promise<Map<string, Record<string, DashboardReportSnapshot>>> {
+  const map = new Map<string, Record<string, DashboardReportSnapshot>>()
+  if (childIds.length === 0) return map
+  const { data, error } = await supabase.from('player_reports').select('*').in('registration_child_id', childIds)
+  if (error) {
+    console.error('fetchParentReportsMap:', error)
+    return map
+  }
+  const byChild = new Map<string, PlayerReportDbRow[]>()
+  for (const row of data ?? []) {
+    const raw = row as PlayerReportDbRow
+    const cid = raw.registration_child_id
+    if (!byChild.has(cid)) byChild.set(cid, [])
+    byChild.get(cid)!.push(raw)
+  }
+  for (const [cid, rows] of byChild) {
+    map.set(cid, mergeReportsByWeek(rows))
+  }
+  return map
+}
+
+function allChildIdsForReports(
+  incrementalChildren: DashboardIncrementalChild[],
+  camps: DashboardCamp[],
+): string[] {
+  const s = new Set<string>()
+  for (const c of incrementalChildren) s.add(c.registrationChildId)
+  for (const c of camps) {
+    if (c.registrationChildId) s.add(c.registrationChildId)
+  }
+  return [...s]
+}
+
+function weekTilesForIncrementalChild(
+  child: DashboardIncrementalChild,
+  weekRemaining: Record<string, number>,
+): DashboardWeekTile[] {
+  return CAMP_SESSIONS.map((week) => {
+    const existing = child.existingWeeks.find((e) => e.week === week)
+    const remaining = weekRemaining[week] ?? 0
+    if (existing) {
+      const ds = existing.displayStatus
+      const rid = existing.registrationId ? existing.registrationId : null
+      if (ds === 'confirmed') return { week, status: 'confirmed' as const, registrationId: rid }
+      if (ds === 'refund_requested') return { week, status: 'refund_requested' as const, registrationId: rid }
+      return { week, status: 'pending' as const, registrationId: rid }
+    }
+    if (child.submissionPending && remaining > 0) {
+      return { week, status: 'addable' as const, registrationId: null }
+    }
+    if (child.submissionPending && remaining <= 0) {
+      return { week, status: 'full' as const, registrationId: null }
+    }
+    return { week, status: 'unavailable' as const, registrationId: null }
+  })
+}
+
+function weekTilesFromCampsOnly(campsForChild: DashboardCamp[]): DashboardWeekTile[] {
+  const byWeek = new Map<string, DashboardCamp>()
+  for (const c of campsForChild) byWeek.set(c.week, c)
+  return CAMP_SESSIONS.map((week) => {
+    const camp = byWeek.get(week)
+    if (!camp) return { week, status: 'unavailable' as const, registrationId: null }
+    if (camp.displayStatus === 'confirmed') return { week, status: 'confirmed', registrationId: camp.registrationId }
+    if (camp.displayStatus === 'refund_requested') {
+      return { week, status: 'refund_requested', registrationId: camp.registrationId }
+    }
+    return { week, status: 'pending', registrationId: camp.registrationId }
+  })
+}
+
+function buildChildrenFromIncremental(
+  incrementalChildren: DashboardIncrementalChild[],
+  weekRemaining: Record<string, number>,
+  reportsByChildId: Map<string, Record<string, DashboardReportSnapshot>>,
+): DashboardChildView[] {
+  return incrementalChildren.map((child) => ({
+    registrationChildId: child.registrationChildId,
+    submissionId: child.submissionId,
+    firstName: child.firstName,
+    lastName: child.lastName,
+    photoUrl: child.photoUrl,
+    submissionPending: child.submissionPending,
+    weeks: weekTilesForIncrementalChild(child, weekRemaining),
+    reportsByWeekKey: reportsByChildId.get(child.registrationChildId) ?? {},
+  }))
+}
+
+function buildChildrenFromCampsOnly(
+  camps: DashboardCamp[],
+  reportsByChildId: Map<string, Record<string, DashboardReportSnapshot>>,
+): DashboardChildView[] {
+  const groups = new Map<string, DashboardCamp[]>()
+  for (const c of camps) {
+    const key = c.registrationChildId ?? `name:${c.childName.trim().toLowerCase()}`
+    if (!groups.has(key)) groups.set(key, [])
+    groups.get(key)!.push(c)
+  }
+  const out: DashboardChildView[] = []
+  for (const list of groups.values()) {
+    const first = list[0]
+    const parts = first.childName.trim().split(/\s+/)
+    const firstName = parts[0] ?? ''
+    const lastName = parts.slice(1).join(' ')
+    const registrationChildId = first.registrationChildId
+    out.push({
+      registrationChildId,
+      submissionId: null,
+      firstName,
+      lastName,
+      photoUrl: first.childPhotoUrl,
+      submissionPending: false,
+      weeks: weekTilesFromCampsOnly(list),
+      reportsByWeekKey: registrationChildId ? (reportsByChildId.get(registrationChildId) ?? {}) : {},
+    })
+  }
+  out.sort((a, b) => {
+    const n = a.lastName.localeCompare(b.lastName)
+    if (n !== 0) return n
+    return a.firstName.localeCompare(b.firstName)
+  })
+  return out
+}
+
 export async function getDashboardPageData(): Promise<{
   camps: DashboardCamp[]
   incremental: { children: DashboardIncrementalChild[]; weekRemaining: Record<string, number> } | null
+  children: DashboardChildView[]
   error: 'auth' | 'fetch' | null
 }> {
   const supabase = await createClient()
   const {
     data: { user },
   } = await supabase.auth.getUser()
-  if (!user) return { camps: [], incremental: null, error: 'auth' }
+  if (!user) return { camps: [], incremental: null, children: [], error: 'auth' }
 
   const { data, error } = await supabase
     .from('registrations')
@@ -110,10 +350,10 @@ export async function getDashboardPageData(): Promise<{
 
   if (error) {
     console.error('getDashboardPageData registrations:', error)
-    return { camps: [], incremental: null, error: 'fetch' }
+    return { camps: [], incremental: null, children: [], error: 'fetch' }
   }
 
-  const camps = rowsToCamps(data ?? [])
+  const regRows = data ?? []
 
   const { data: submissions, error: subErr } = await supabase
     .from('registration_submissions')
@@ -122,7 +362,7 @@ export async function getDashboardPageData(): Promise<{
 
   if (subErr) {
     console.error('getDashboardPageData submissions:', subErr)
-    return { camps, incremental: null, error: 'fetch' }
+    return { camps: rowsToCamps(regRows, new Map()), incremental: null, children: [], error: 'fetch' }
   }
 
   const submissionIds = (submissions ?? []).map((s) => s.id)
@@ -132,7 +372,11 @@ export async function getDashboardPageData(): Promise<{
     for (const w of CAMP_SESSIONS) {
       weekRemaining[w] = usage?.[w]?.remaining ?? 0
     }
-    return { camps, incremental: { children: [], weekRemaining }, error: null }
+    const camps = rowsToCamps(regRows, new Map())
+    const reportChildIds = allChildIdsForReports([], camps)
+    const reportsByChildId = await fetchParentReportsMap(supabase, reportChildIds)
+    const children = buildChildrenFromCampsOnly(camps, reportsByChildId)
+    return { camps, incremental: { children: [], weekRemaining }, children, error: null }
   }
 
   const { data: regChildren, error: chErr } = await supabase
@@ -163,8 +407,22 @@ export async function getDashboardPageData(): Promise<{
 
   if (chErr) {
     console.error('getDashboardPageData registration_children:', chErr)
-    return { camps, incremental: null, error: 'fetch' }
+    const camps = rowsToCamps(regRows, new Map())
+    const reportChildIds = allChildIdsForReports([], camps)
+    const reportsByChildId = await fetchParentReportsMap(supabase, reportChildIds)
+    const children = buildChildrenFromCampsOnly(camps, reportsByChildId)
+    return { camps, incremental: null, children, error: 'fetch' }
   }
+
+  const childIdMap = childIdMapFromRegistrationChildren(
+    (regChildren ?? []).map((c) => ({
+      id: c.id,
+      submission_id: c.submission_id,
+      player_first_name: c.player_first_name,
+      player_last_name: c.player_last_name,
+    })),
+  )
+  const camps = rowsToCamps(regRows, childIdMap)
 
   const usage = await getWeekSpotUsage()
   const weekRemaining: Record<string, number> = {}
@@ -172,7 +430,6 @@ export async function getDashboardPageData(): Promise<{
     weekRemaining[w] = usage?.[w]?.remaining ?? 0
   }
 
-  const regRows = data ?? []
   const incrementalChildren: DashboardIncrementalChild[] = []
 
   for (const child of regChildren ?? []) {
@@ -234,9 +491,17 @@ export async function getDashboardPageData(): Promise<{
     return a.firstName.localeCompare(b.firstName)
   })
 
+  const reportChildIds = allChildIdsForReports(incrementalChildren, camps)
+  const reportsByChildId = await fetchParentReportsMap(supabase, reportChildIds)
+  const children =
+    incrementalChildren.length > 0
+      ? buildChildrenFromIncremental(incrementalChildren, weekRemaining, reportsByChildId)
+      : buildChildrenFromCampsOnly(camps, reportsByChildId)
+
   return {
     camps,
     incremental: { children: incrementalChildren, weekRemaining },
+    children,
     error: null,
   }
 }
@@ -248,6 +513,80 @@ export async function getDashboardCamps(): Promise<{
 }> {
   const { camps, error } = await getDashboardPageData()
   return { camps, error }
+}
+
+export async function updateChildProfilePhoto(input: {
+  registrationChildId: string
+  childPhotoUrl: string
+}): Promise<{ success: true } | { success: false; error: string }> {
+  const trimmed = (input.childPhotoUrl ?? '').trim()
+  if (!trimmed || !isHttpsPhotoUrl(trimmed)) {
+    return { success: false, error: 'A valid HTTPS image URL is required.' }
+  }
+
+  const supabase = await createClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  if (!user) return { success: false, error: 'Please sign in first.' }
+
+  const { data: child, error: chErr } = await supabase
+    .from('registration_children')
+    .select('id, submission_id, player_first_name, player_last_name')
+    .eq('id', input.registrationChildId)
+    .single()
+
+  if (chErr || !child) {
+    return { success: false, error: 'Player not found.' }
+  }
+
+  const { data: sub, error: sErr } = await supabase
+    .from('registration_submissions')
+    .select('id, auth_user_id')
+    .eq('id', child.submission_id)
+    .single()
+
+  if (sErr || !sub) {
+    return { success: false, error: 'Registration not found.' }
+  }
+  if (sub.auth_user_id !== user.id) {
+    return { success: false, error: 'Not authorized.' }
+  }
+
+  let db: ReturnType<typeof createServiceRoleClient>
+  try {
+    db = createServiceRoleClient()
+  } catch {
+    return { success: false, error: 'Server configuration is incomplete.' }
+  }
+
+  const fn = (child.player_first_name ?? '').trim()
+  const ln = (child.player_last_name ?? '').trim()
+
+  const { error: upCh } = await db
+    .from('registration_children')
+    .update({ child_photo_url: trimmed })
+    .eq('id', child.id)
+
+  if (upCh) {
+    console.error('updateChildProfilePhoto registration_children:', upCh)
+    return { success: false, error: 'Could not save photo. Please try again.' }
+  }
+
+  const { error: upReg } = await db
+    .from('registrations')
+    .update({ child_photo_url: trimmed })
+    .eq('registration_submission_id', child.submission_id)
+    .eq('user_id', user.id)
+    .eq('player_first_name', fn)
+    .eq('player_last_name', ln)
+
+  if (upReg) {
+    console.error('updateChildProfilePhoto registrations:', upReg)
+    return { success: false, error: 'Could not sync photo to camp rows. Please try again.' }
+  }
+
+  return { success: true }
 }
 
 export async function removePendingCampRegistration(input: {

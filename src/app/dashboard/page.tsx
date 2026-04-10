@@ -51,13 +51,13 @@ export default async function DashboardPage() {
     )
   }
 
-  const { camps, incremental } = await getDashboardPageData()
+  const { camps, incremental, children } = await getDashboardPageData()
   const refundWindowOpen = isRefundWindowOpenPacific()
 
   return (
     <>
       <Navbar />
-      <DashboardClient initialCamps={camps} incremental={incremental} refundWindowOpen={refundWindowOpen} />
+      <DashboardClient initialCamps={camps} incremental={incremental} children={children} refundWindowOpen={refundWindowOpen} />
       <Footer />
     </>
   )

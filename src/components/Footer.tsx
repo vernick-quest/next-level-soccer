@@ -36,7 +36,7 @@ export default function Footer() {
               <li><Link href="/coaches" className="hover:text-[#f8c5b1] transition-colors">Coach&apos;s View</Link></li>
               <li>
                 <Link href="/report-card-skills" className="hover:text-[#f8c5b1] transition-colors">
-                  Report card skills
+                  Report Card
                 </Link>
               </li>
             </ul>

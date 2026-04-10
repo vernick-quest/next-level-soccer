@@ -1,16 +1,12 @@
 import Link from 'next/link'
 import Navbar from '@/components/Navbar'
 import Footer from '@/components/Footer'
-import {
-  REPORT_CARD_DOC_URL,
-  REPORT_CARD_RATING_SCALE_DOC,
-  REPORT_CARD_SKILL_PILLARS_DOC,
-} from '@/lib/report-card-doc-reference'
+import { REPORT_CARD_RATING_SCALE_DOC, REPORT_CARD_SKILL_PILLARS_DOC } from '@/lib/report-card-doc-reference'
 
 export const metadata = {
-  title: 'Weekly report card skills | Next Level Soccer SF',
+  title: 'Next Level Soccer Report Card | Next Level Soccer SF',
   description:
-    'Competitive soccer rating scale (1–5) and skills assessed: Technical, Tactical, Physical, and Psychological.',
+    'Rating scale (1–5) and skills we assess: Technical, Tactical, Physical, and Psychological.',
 }
 
 const CATEGORY_ACCENT: Record<string, string> = {
@@ -32,18 +28,9 @@ export default function ReportCardSkillsPage() {
               ← Home
             </Link>
           </p>
-          <h1 className="text-3xl sm:text-4xl font-extrabold text-[#062744] mb-3">Next Level Soccer report card</h1>
+          <h1 className="text-3xl sm:text-4xl font-extrabold text-[#062744] mb-3">Next Level Soccer Report Card</h1>
           <p className="text-slate-600 max-w-2xl mb-2">
-            This page mirrors our published{' '}
-            <a
-              href={REPORT_CARD_DOC_URL}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-[#f05a28] font-semibold hover:underline"
-            >
-              report card reference (Google Doc)
-            </a>
-            : the competitive rating scale and the skills we assess each week.
+            Here is how we rate skills and what coaches look for each week at camp.
           </p>
           <p className="text-sm text-slate-500 max-w-2xl mb-8">
             Coaches also record scores in our camp system using detailed metrics that align with these four pillars.
@@ -51,10 +38,10 @@ export default function ReportCardSkillsPage() {
 
           <section className="mb-10" aria-labelledby="rating-scale">
             <h2 id="rating-scale" className="text-lg font-bold text-[#062744] mb-1">
-              Competitive Soccer Rating Scale (1 to 5)
+              Rating scale (1 to 5)
             </h2>
             <p className="text-sm text-slate-600 mb-4">
-              Each skill is scored from 1 (emerging) to 5 (elite). Colors below are a quick visual key for parents.
+              Each skill gets a number from 1 to 5. The colors are a quick guide.
             </p>
             <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
               {REPORT_CARD_RATING_SCALE_DOC.map((r) => (
@@ -63,10 +50,7 @@ export default function ReportCardSkillsPage() {
                   className={`rounded-xl px-2 sm:px-3 py-3 text-center ${r.swatchClassName}`}
                 >
                   <div className="text-2xl font-extrabold tabular-nums">{r.value}</div>
-                  <div className="text-[10px] sm:text-xs font-bold leading-tight mt-1">{r.label}</div>
-                  <div className="text-[9px] sm:text-[10px] font-semibold opacity-90 mt-0.5 leading-snug">
-                    {r.definition}
-                  </div>
+                  <div className="text-sm sm:text-base font-extrabold leading-tight mt-1">{r.label}</div>
                 </div>
               ))}
             </div>
@@ -75,10 +59,7 @@ export default function ReportCardSkillsPage() {
                 <li key={r.value} className="border-b border-[#e8d8ce] pb-4 last:border-0 last:pb-0">
                   <div className="flex flex-wrap items-baseline gap-2 mb-1">
                     <span className="font-extrabold text-[#062744] tabular-nums text-lg">{r.value}</span>
-                    <span className="font-bold text-slate-900">
-                      {r.label}
-                      <span className="font-normal text-slate-500"> — {r.definition}</span>
-                    </span>
+                    <span className="font-bold text-slate-900">{r.label}</span>
                   </div>
                   <p className="text-slate-600 leading-relaxed pl-0 sm:pl-8">{r.meaning}</p>
                 </li>

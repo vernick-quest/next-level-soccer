@@ -2,7 +2,10 @@
 
 import { getStaffAdminUser } from '@/lib/admin'
 import { createClient } from '@/lib/supabase/server'
+import { CAMP_SESSIONS } from '@/lib/camp-weeks'
 import { ALL_REPORT_METRIC_KEYS, type ReportMetricKey } from '@/lib/player-report-metrics'
+
+const KNOWN_CAMP_WEEKS = new Set<string>(CAMP_SESSIONS)
 
 export type CoachPlayerRow = {
   id: string
@@ -80,6 +83,7 @@ export type SaveReportResult = { success: true } | { success: false; error: stri
 
 export async function savePlayerReport(payload: {
   registrationChildId: string
+  campSession: string
   scores: Record<ReportMetricKey, number>
   coachComments: string
   dateGenerated: string
@@ -95,6 +99,9 @@ export async function savePlayerReport(payload: {
   if (!payload.registrationChildId) {
     return { success: false, error: 'Select a player.' }
   }
+  if (!payload.campSession?.trim() || !KNOWN_CAMP_WEEKS.has(payload.campSession.trim())) {
+    return { success: false, error: 'Select a valid camp week.' }
+  }
 
   for (const key of ALL_REPORT_METRIC_KEYS) {
     const v = payload.scores[key]
@@ -105,6 +112,7 @@ export async function savePlayerReport(payload: {
 
   const row = {
     registration_child_id: payload.registrationChildId,
+    camp_session: payload.campSession.trim(),
     technical_1: payload.scores.technical_1,
     technical_2: payload.scores.technical_2,
     technical_3: payload.scores.technical_3,

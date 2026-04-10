@@ -285,18 +285,44 @@ create table if not exists player_reports (
 create index if not exists player_reports_registration_child_id_idx on player_reports (registration_child_id);
 create index if not exists player_reports_date_generated_idx on player_reports (date_generated desc);
 
+-- Which camp week this report is for (matches registrations.camp_session / CAMP_SESSIONS labels).
+alter table public.player_reports add column if not exists camp_session text;
+create index if not exists player_reports_child_camp_idx on public.player_reports (registration_child_id, camp_session);
+
 alter table player_reports enable row level security;
 
 do $$
 begin
-  if not exists (
+  if exists (
     select 1 from pg_policies where schemaname = 'public' and tablename = 'player_reports' and policyname = 'Authenticated coaches manage player reports'
   ) then
-    create policy "Authenticated coaches manage player reports"
-      on player_reports
-      for all
-      using (auth.role() = 'authenticated')
-      with check (auth.role() = 'authenticated');
+    execute 'drop policy "Authenticated coaches manage player reports" on public.player_reports';
+  end if;
+  if not exists (
+    select 1 from pg_policies where schemaname = 'public' and tablename = 'player_reports' and policyname = 'Coaches insert player reports'
+  ) then
+    create policy "Coaches insert player reports"
+      on public.player_reports
+      for insert
+      to authenticated
+      with check (true);
+  end if;
+  if not exists (
+    select 1 from pg_policies where schemaname = 'public' and tablename = 'player_reports' and policyname = 'Parents read own player reports'
+  ) then
+    create policy "Parents read own player reports"
+      on public.player_reports
+      for select
+      to authenticated
+      using (
+        exists (
+          select 1
+          from public.registration_children rc
+          join public.registration_submissions s on s.id = rc.submission_id
+          where rc.id = player_reports.registration_child_id
+            and s.auth_user_id = auth.uid()
+        )
+      );
   end if;
 end $$;
 

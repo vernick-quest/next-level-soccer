@@ -2,6 +2,8 @@
 
 import { useState, useTransition, useMemo, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
+import { CAMP_SESSIONS } from '@/lib/camp-weeks'
+import { campNameFromWeekLabel } from '@/lib/camp-display'
 import {
   REPORT_METRIC_GROUPS,
   ALL_REPORT_METRIC_KEYS,
@@ -39,6 +41,7 @@ export default function CoachReportForm({
   )
   const [scores, setScores] = useState(defaultScores)
   const [coachComments, setCoachComments] = useState('')
+  const [campSession, setCampSession] = useState<string>(() => CAMP_SESSIONS[0] ?? '')
   const [dateLocal, setDateLocal] = useState(() => {
     const d = new Date()
     d.setMinutes(d.getMinutes() - d.getTimezoneOffset())
@@ -76,6 +79,7 @@ export default function CoachReportForm({
     startTransition(async () => {
       const result = await savePlayerReport({
         registrationChildId: childId,
+        campSession,
         scores,
         coachComments,
         dateGenerated: iso,
@@ -160,6 +164,22 @@ export default function CoachReportForm({
               )}
 
               <label className="block">
+                <span className="block text-sm font-semibold text-[#213c57] mb-2">Camp week</span>
+                <select
+                  value={campSession}
+                  onChange={(e) => setCampSession(e.target.value)}
+                  className="w-full border border-[#e8d8ce] rounded-xl px-4 py-3 text-slate-800 bg-white focus:ring-2 focus:ring-[#f05a28] focus:border-transparent"
+                  required
+                >
+                  {CAMP_SESSIONS.map((w) => (
+                    <option key={w} value={w}>
+                      {campNameFromWeekLabel(w)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <label className="block">
                 <span className="block text-sm font-semibold text-[#213c57] mb-2">Report date &amp; time</span>
                 <input
                   type="datetime-local"
@@ -222,7 +242,7 @@ export default function CoachReportForm({
 
             <button
               type="submit"
-              disabled={isPending || !childId}
+              disabled={isPending || !childId || !campSession}
               className="w-full bg-[#062744] hover:bg-[#041f36] disabled:bg-[#4b6782] text-white font-bold py-4 rounded-full transition-colors disabled:cursor-not-allowed"
             >
               {isPending ? 'Saving…' : 'Save report'}

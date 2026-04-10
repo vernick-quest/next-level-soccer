@@ -26,3 +26,9 @@ export function campNameFromWeekLabel(week: string): string {
 export function campDatesFromWeekLabel(week: string): string {
   return WEEK_DATE_RANGE[week] ?? 'Mon–Fri · 3:30–7:30 PM · Beach Chalet'
 }
+
+/** Compact label for grid column headers (e.g. "Jun 8"). */
+export function weekColumnShortLabel(week: string): string {
+  const n = campNameFromWeekLabel(week).replace(/^Week of\s+/i, '').trim()
+  return n || week
+}

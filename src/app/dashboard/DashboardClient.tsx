@@ -1,40 +1,27 @@
 'use client'
 
 import Link from 'next/link'
-import { useState, useTransition } from 'react'
+import { useEffect, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
-import { CAMP_SESSIONS } from '@/lib/camp-weeks'
-import { campNameFromWeekLabel, campDatesFromWeekLabel } from '@/lib/camp-display'
-import { REFUND_DEADLINE_LABEL } from '@/lib/refund-deadline'
 import {
   removePendingCampRegistration,
   requestRefundForCamp,
   submitAdditionalWeeks,
   type DashboardCamp,
+  type DashboardChildView,
   type DashboardIncrementalChild,
 } from './actions'
-
-function statusBadge(displayStatus: DashboardCamp['displayStatus']) {
-  if (displayStatus === 'confirmed') {
-    return { label: 'Confirmed', className: 'bg-green-100 text-green-800' }
-  }
-  if (displayStatus === 'refund_requested') {
-    return { label: 'Refund requested', className: 'bg-violet-100 text-violet-800' }
-  }
-  return { label: 'Pending', className: 'bg-amber-100 text-amber-800' }
-}
-
-function weekKeySet(child: DashboardIncrementalChild): Set<string> {
-  return new Set(child.existingWeeks.map((e) => e.week))
-}
+import ChildDashboardPanel from './ChildDashboardPanel'
 
 export default function DashboardClient({
   initialCamps,
   incremental,
+  children,
   refundWindowOpen,
 }: {
   initialCamps: DashboardCamp[]
   incremental: { children: DashboardIncrementalChild[]; weekRemaining: Record<string, number> } | null
+  children: DashboardChildView[]
   refundWindowOpen: boolean
 }) {
   const [camps, setCamps] = useState(initialCamps)
@@ -43,9 +30,23 @@ export default function DashboardClient({
   const [isPending, startTransition] = useTransition()
   const router = useRouter()
   const [extraWeekSelection, setExtraWeekSelection] = useState<Record<string, Set<string>>>({})
+  const [activeIndex, setActiveIndex] = useState(0)
 
-  const showIncrementalSection = incremental && incremental.children.length > 0
+  useEffect(() => {
+    setCamps(initialCamps)
+  }, [initialCamps])
+
+  useEffect(() => {
+    setActiveIndex((i) => (children.length === 0 ? 0 : Math.min(i, children.length - 1)))
+  }, [children.length])
+
   const canSubmitIncremental = incremental?.children.some((c) => c.submissionPending) ?? false
+  const showPaidFamilyBanner = !(incremental?.children ?? []).some((c) => c.submissionPending)
+
+  const activeChild = children[activeIndex]
+  const incrementalChild = activeChild
+    ? incremental?.children.find((c) => c.registrationChildId === activeChild.registrationChildId) ?? null
+    : null
 
   function toggleExtraWeek(childId: string, week: string, allowed: boolean) {
     if (!allowed) return
@@ -102,9 +103,7 @@ export default function DashboardClient({
         return
       }
       setSuccess('Registration cancelled.')
-      setCamps((prev) =>
-        prev.filter((c) => !(c.registrationId === camp.registrationId)),
-      )
+      setCamps((prev) => prev.filter((c) => !(c.registrationId === camp.registrationId)))
       router.refresh()
     })
   }
@@ -131,9 +130,7 @@ export default function DashboardClient({
       setSuccess('Refund request submitted. We will contact you soon.')
       setCamps((prev) =>
         prev.map((c) =>
-          c.registrationId === camp.registrationId
-            ? { ...c, displayStatus: 'refund_requested' as const }
-            : c,
+          c.registrationId === camp.registrationId ? { ...c, displayStatus: 'refund_requested' as const } : c,
         ),
       )
       router.refresh()
@@ -143,12 +140,12 @@ export default function DashboardClient({
   return (
     <main className="bg-[#f7f2e8] min-h-screen pt-28 pb-16">
       <div className="max-w-5xl mx-auto px-4 sm:px-6">
-        <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 mb-8">
+        <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 mb-6">
           <div>
             <h1 className="text-3xl font-extrabold text-[#062744] mb-1">Parent Dashboard</h1>
-            <p className="text-slate-600 mb-2 font-medium text-[#213c57]">Manage registrations</p>
+            <p className="text-slate-600 mb-2 font-medium text-[#213c57]">One place per camper — weeks, payments, and coach feedback</p>
             <p className="text-slate-600 text-sm">
-              Registrations are tied to your account. Each row is one camp week for one player.
+              Switch between your children below. Camp tiles are color-coded; report cards show skill scores by week as coaches submit them.
             </p>
           </div>
           <Link
@@ -170,106 +167,9 @@ export default function DashboardClient({
           </div>
         )}
 
-        {showIncrementalSection && (
-          <section className="mb-10 bg-white border border-[#e8d8ce] rounded-2xl p-5 sm:p-6 shadow-sm">
-            <h2 className="text-lg font-bold text-[#062744] mb-1">Add more camp weeks</h2>
-            <p className="text-sm text-slate-600 mb-4">
-              Weeks you already hold are checked and locked. While your family registration is still pending payment,
-              you can select additional weeks that have openings.
-            </p>
-            {!incremental.children.some((c) => c.submissionPending) && (
-              <p className="text-sm text-amber-800 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2 mb-4">
-                Additional weeks can only be added online before your family registration is marked paid. For more weeks
-                after payment, email nextlevelsoccersf@gmail.com.
-              </p>
-            )}
-            <div className="space-y-6">
-              {incremental.children.map((child) => {
-                const held = weekKeySet(child)
-                const selected = extraWeekSelection[child.registrationChildId] ?? new Set<string>()
-                return (
-                  <div
-                    key={child.registrationChildId}
-                    className="border border-[#f0e2d9] rounded-xl p-4 bg-[#fffaf5]"
-                  >
-                    <div className="flex items-center gap-3 mb-3">
-                      {child.photoUrl ? (
-                        <img
-                          src={child.photoUrl}
-                          alt=""
-                          className="w-10 h-10 rounded-full object-cover border border-[#e8d8ce]"
-                        />
-                      ) : (
-                        <div className="w-10 h-10 rounded-full bg-slate-100 border border-[#e8d8ce]" />
-                      )}
-                      <div className="font-bold text-slate-900">
-                        {child.firstName} {child.lastName}
-                      </div>
-                    </div>
-                    <div className="grid sm:grid-cols-2 gap-2 text-sm">
-                      {CAMP_SESSIONS.map((week) => {
-                        const existing = child.existingWeeks.find((e) => e.week === week)
-                        const isHeld = held.has(week)
-                        const remaining = incremental.weekRemaining[week] ?? 0
-                        const canAdd =
-                          child.submissionPending && !isHeld && remaining > 0
-                        const isSelected = selected.has(week)
-                        return (
-                          <label
-                            key={week}
-                            className={`flex items-start gap-2 rounded-lg px-2 py-2 border ${
-                              isHeld
-                                ? 'border-slate-200 bg-slate-50 text-slate-500 cursor-not-allowed'
-                                : canAdd
-                                  ? 'border-[#e8d8ce] bg-white cursor-pointer hover:bg-[#fff8f3]'
-                                  : 'border-slate-100 bg-slate-50/80 text-slate-400 cursor-not-allowed'
-                            }`}
-                          >
-                            <input
-                              type="checkbox"
-                              className="mt-1 accent-[#f05a28] shrink-0"
-                              checked={isHeld || isSelected}
-                              disabled={isHeld || !canAdd}
-                              onChange={() =>
-                                toggleExtraWeek(child.registrationChildId, week, !!canAdd)
-                              }
-                            />
-                            <span>
-                              <span className="font-medium block">{campNameFromWeekLabel(week)}</span>
-                              <span className="text-xs text-slate-500">{campDatesFromWeekLabel(week)}</span>
-                              {isHeld && existing && (
-                                <span className="text-xs block mt-0.5 text-slate-500">
-                                  Already reserved ({existing.displayStatus === 'confirmed' ? 'paid/confirmed' : existing.displayStatus === 'refund_requested' ? 'refund requested' : 'pending'})
-                                </span>
-                              )}
-                              {!isHeld && !canAdd && child.submissionPending && (
-                                <span className="text-xs block mt-0.5">Full or unavailable</span>
-                              )}
-                            </span>
-                          </label>
-                        )
-                      })}
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
-            {canSubmitIncremental && (
-              <button
-                type="button"
-                disabled={isPending}
-                onClick={() => saveAdditionalWeeks()}
-                className="mt-5 w-full sm:w-auto bg-[#062744] hover:bg-[#041f36] disabled:opacity-50 text-white font-bold py-3 px-8 rounded-full text-sm transition-colors"
-              >
-                {isPending ? 'Saving…' : 'Save additional weeks'}
-              </button>
-            )}
-          </section>
-        )}
-
-        {camps.length === 0 ? (
+        {children.length === 0 ? (
           <div className="bg-white border border-[#e8d8ce] rounded-2xl p-8 text-slate-600">
-            <p className="mb-4">No camp weeks on file yet.</p>
+            <p className="mb-4">No campers linked to this account yet.</p>
             <div className="flex flex-wrap gap-3">
               <Link
                 href="/register"
@@ -286,103 +186,57 @@ export default function DashboardClient({
             </div>
           </div>
         ) : (
-          <div className="space-y-4">
-            <div className="hidden sm:grid sm:grid-cols-12 gap-3 px-4 text-xs font-bold text-[#213c57] uppercase tracking-wide">
-              <div className="sm:col-span-3">Camp</div>
-              <div className="sm:col-span-3">Schedule</div>
-              <div className="sm:col-span-2">Player</div>
-              <div className="sm:col-span-2">Status</div>
-              <div className="sm:col-span-2 text-right">Actions</div>
+          <div className="bg-white border border-[#e8d8ce] rounded-2xl shadow-sm overflow-hidden">
+            <div className="border-b border-[#e8d8ce] bg-[#fffaf5] overflow-x-auto">
+              <div className="flex min-w-0">
+                {children.map((ch, i) => {
+                  const label = `${ch.firstName} ${ch.lastName}`.trim() || 'Player'
+                  return (
+                    <button
+                      key={`${ch.registrationChildId ?? 'legacy'}-${label}-${i}`}
+                      type="button"
+                      role="tab"
+                      aria-selected={activeIndex === i}
+                      onClick={() => setActiveIndex(i)}
+                      className={`shrink-0 px-4 sm:px-6 py-3.5 text-sm font-bold border-b-2 transition-colors whitespace-nowrap ${
+                        activeIndex === i
+                          ? 'border-[#f05a28] text-[#062744] bg-white'
+                          : 'border-transparent text-slate-600 hover:text-[#062744] hover:bg-white/60'
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  )
+                })}
+              </div>
             </div>
-
-            {camps.map((camp) => {
-              const badge = statusBadge(camp.displayStatus)
-              const canCancel = camp.displayStatus === 'pending'
-              const canRequestRefund = refundWindowOpen && camp.displayStatus === 'confirmed'
-
-              return (
-                <div
-                  key={camp.registrationId}
-                  className="bg-white border border-[#e8d8ce] rounded-2xl p-4 sm:p-5"
-                >
-                  <div className="sm:grid sm:grid-cols-12 sm:gap-3 sm:items-center">
-                    <div className="flex items-start gap-3 sm:col-span-3 mb-3 sm:mb-0">
-                      {camp.childPhotoUrl ? (
-                        <img
-                          src={camp.childPhotoUrl}
-                          alt=""
-                          className="w-11 h-11 rounded-full object-cover border border-[#e8d8ce] shrink-0 sm:hidden"
-                        />
-                      ) : null}
-                      <div>
-                        <div className="text-xs font-semibold text-slate-500 sm:hidden">Camp</div>
-                        <div className="font-bold text-slate-900 leading-tight">{campNameFromWeekLabel(camp.week)}</div>
-                      </div>
-                    </div>
-
-                    <div className="sm:col-span-3 mb-2 sm:mb-0">
-                      <div className="text-xs font-semibold text-slate-500 sm:hidden">Schedule</div>
-                      <div className="text-sm text-slate-700">{campDatesFromWeekLabel(camp.week)}</div>
-                    </div>
-
-                    <div className="sm:col-span-2 mb-2 sm:mb-0 flex items-center gap-3">
-                      {camp.childPhotoUrl ? (
-                        <img
-                          src={camp.childPhotoUrl}
-                          alt={camp.childName}
-                          className="hidden sm:block w-10 h-10 rounded-full object-cover border border-[#e8d8ce] shrink-0"
-                        />
-                      ) : (
-                        <div className="hidden sm:flex w-10 h-10 rounded-full bg-slate-100 border border-[#e8d8ce] items-center justify-center text-[10px] text-slate-500 shrink-0">
-                          No photo
-                        </div>
-                      )}
-                      <div>
-                        <div className="text-xs font-semibold text-slate-500 sm:hidden">Player</div>
-                        <div className="font-semibold text-slate-800 text-sm">{camp.childName}</div>
-                      </div>
-                    </div>
-
-                    <div className="sm:col-span-2 mb-3 sm:mb-0">
-                      <div className="text-xs font-semibold text-slate-500 sm:hidden">Status</div>
-                      <span className={`inline-block text-xs font-semibold px-3 py-1 rounded-full ${badge.className}`}>
-                        {badge.label}
-                      </span>
-                    </div>
-
-                    <div className="sm:col-span-2 flex flex-col sm:items-end gap-2">
-                      {canCancel && (
-                        <button
-                          type="button"
-                          disabled={isPending}
-                          onClick={() => cancelRegistration(camp)}
-                          className="w-full sm:w-auto text-sm font-semibold text-[#c24a22] hover:text-[#9b3e1f] border border-[#f0c4b8] hover:bg-[#fff5f2] rounded-full px-4 py-2 disabled:opacity-50"
-                        >
-                          Cancel registration
-                        </button>
-                      )}
-                      {camp.displayStatus === 'confirmed' && (
-                        <div className="w-full sm:flex sm:flex-col sm:items-end gap-1">
-                          <button
-                            type="button"
-                            disabled={isPending || !canRequestRefund}
-                            onClick={() => canRequestRefund && requestRefund(camp)}
-                            className="w-full sm:w-auto text-sm font-semibold rounded-full px-4 py-2 border border-[#e8d8ce] disabled:opacity-45 disabled:cursor-not-allowed text-[#213c57] enabled:hover:text-[#062744] enabled:hover:bg-[#f7f2e8]"
-                          >
-                            Request refund
-                          </button>
-                          {!refundWindowOpen && (
-                            <p className="text-xs text-slate-500 text-left sm:text-right max-w-[17rem] sm:ml-auto">
-                              Refund window closed (Deadline: {REFUND_DEADLINE_LABEL})
-                            </p>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              )
-            })}
+            <div className="p-5 sm:p-8" role="tabpanel">
+              {activeChild && (
+                <ChildDashboardPanel
+                  child={activeChild}
+                  incrementalChild={incrementalChild}
+                  weekRemaining={incremental?.weekRemaining ?? {}}
+                  refundWindowOpen={refundWindowOpen}
+                  canSubmitIncremental={canSubmitIncremental}
+                  showPaidFamilyBanner={showPaidFamilyBanner}
+                  extraWeekSelection={
+                    activeChild.registrationChildId
+                      ? extraWeekSelection[activeChild.registrationChildId] ?? new Set<string>()
+                      : new Set<string>()
+                  }
+                  onToggleExtraWeek={(week, allowed) => {
+                    if (activeChild.registrationChildId) {
+                      toggleExtraWeek(activeChild.registrationChildId, week, allowed)
+                    }
+                  }}
+                  onSaveAdditionalWeeks={saveAdditionalWeeks}
+                  onCancelRegistration={cancelRegistration}
+                  onRequestRefund={requestRefund}
+                  isPending={isPending}
+                  camps={camps}
+                />
+              )}
+            </div>
           </div>
         )}
       </div>
