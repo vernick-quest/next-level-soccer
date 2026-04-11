@@ -18,6 +18,26 @@ const sessions = CAMP_SESSIONS.map((weekKey) => ({
 
 const MIN_WEEK_PLAYERS = 10
 
+const aboutCampPillars = [
+  {
+    title: 'Advanced Technical Work',
+    detail:
+      'Ball control with both feet, passing weight, and 1v1 mastery under pressure',
+  },
+  {
+    title: 'Tactical Intelligence',
+    detail: 'Scanning the field, spatial awareness, and high-speed transition play',
+  },
+  {
+    title: 'Physical Development',
+    detail: 'Match endurance, explosive short-burst speed, and agility',
+  },
+  {
+    title: 'The Competitive Mindset',
+    detail: 'Coachability, resilience under pressure, and on-field communication',
+  },
+] as const
+
 const homeDevelopmentPillars = [
   {
     id: 'technical',
@@ -181,7 +201,7 @@ export default async function HomePage() {
                       <span className="text-[#f05a28]">{pillar.subtitle}</span>
                     </h3>
                   </div>
-                  <p className="px-4 sm:px-5 py-4 sm:py-5 text-base sm:text-lg font-semibold text-[#062744] bg-white leading-snug m-0 flex-1">
+                  <p className="px-4 sm:px-5 py-4 sm:py-5 text-base sm:text-lg font-semibold text-[#062744] bg-white leading-snug m-0 flex-1 ms-4 sm:ms-6 pl-3 sm:pl-4 border-l-2 border-[#f05a28]/40 italic pillar-tagline-pulse">
                     {pillar.tagline}
                   </p>
                 </div>
@@ -204,22 +224,19 @@ export default async function HomePage() {
               <p className="text-slate-600 leading-relaxed mb-8">
               Every session is designed to challenge committed players, elevate game performance, and prepare athletes for the next level of competition.
               </p>
-              <div className="flex flex-col sm:flex-row gap-6">
-                <div className="flex items-start gap-3">
-                  <span className="text-[#f05a28] text-xl mt-0.5 shrink-0">✓</span>
-                  <p className="text-sm sm:text-base leading-relaxed m-0 font-bold">
-                    <span className="text-[#f05a28]">Advanced Technical Work</span>
-                    <span className="text-[#062744]"> (Ball control with both feet under pressure)</span>
-                  </p>
-                </div>
-                <div className="flex items-start gap-3">
-                  <span className="text-[#f05a28] text-xl mt-0.5 shrink-0">✓</span>
-                  <p className="text-sm sm:text-base leading-relaxed m-0 font-bold">
-                    <span className="text-[#f05a28]">Physical Development</span>
-                    <span className="text-[#062744]"> (Match endurance, explosive speed, and agility)</span>
-                  </p>
-                </div>
-              </div>
+              <ul className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-5 list-none p-0 m-0">
+                {aboutCampPillars.map((pillar) => (
+                  <li key={pillar.title} className="flex items-start gap-3">
+                    <span className="text-[#f05a28] text-xl mt-0.5 shrink-0" aria-hidden>
+                      ✓
+                    </span>
+                    <p className="text-sm sm:text-base leading-relaxed m-0 font-bold">
+                      <span className="text-[#f05a28]">{pillar.title}:</span>{' '}
+                      <span className="text-[#062744] font-semibold">({pillar.detail})</span>
+                    </p>
+                  </li>
+                ))}
+              </ul>
             </div>
 
             <div className="relative">

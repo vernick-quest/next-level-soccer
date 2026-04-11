@@ -29,3 +29,19 @@ body {
 .hero-arrow-pulse {
   animation: hero-arrow-pulse 2.4s ease-in-out infinite;
 }
+
+@keyframes pillar-tagline-soft {
+  0%,
+  100% {
+    opacity: 0.88;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .pillar-tagline-pulse {
+    animation: pillar-tagline-soft 4s ease-in-out infinite;
+  }
+}

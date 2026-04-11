@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState, useTransition } from 'react'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
-import { CAMP_SESSIONS } from '@/lib/camp-weeks'
+import { CAMP_SESSIONS, campWeekSortIndex } from '@/lib/camp-weeks'
 import { campNameFromWeekLabel } from '@/lib/camp-display'
 import { CAMP_WEEK_PRICE_CENTS } from '@/lib/camp-pricing'
 import { REPORT_CARD_RATING_SCALE_DOC } from '@/lib/report-card-doc-reference'
@@ -75,7 +75,7 @@ export default function CoachPortal({
   initialWeekPlayers: Record<string, CoachWeekPlayerRow[]>
   initialEmailTemplateBundle: EmailTemplateBundle
 }) {
-  const [tab, setTab] = useState<'registrations' | 'reports' | 'emails'>('registrations')
+  const [tab, setTab] = useState<'registrations' | 'reports' | 'cancel_week' | 'emails'>('registrations')
   const [registrations, setRegistrations] = useState(initialRegistrations)
   const [weekPlayersMap, setWeekPlayersMap] = useState(initialWeekPlayers)
   const [campSession, setCampSession] = useState<string>(CAMP_SESSIONS[0] ?? '')
@@ -115,15 +115,15 @@ export default function CoachPortal({
         if (ln !== 0) return ln
         const fn = (a.player_first_name ?? '').localeCompare(b.player_first_name ?? '')
         if (fn !== 0) return fn
+        const w = campWeekSortIndex(a.camp_session ?? '') - campWeekSortIndex(b.camp_session ?? '')
+        if (w !== 0) return w
         return new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
       })
     } else {
       list.sort((a, b) => {
-        const t = new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
-        if (t !== 0) return t
-        const ln = (a.player_last_name ?? '').localeCompare(b.player_last_name ?? '')
-        if (ln !== 0) return ln
-        return (a.player_first_name ?? '').localeCompare(b.player_first_name ?? '')
+        const w = campWeekSortIndex(a.camp_session ?? '') - campWeekSortIndex(b.camp_session ?? '')
+        if (w !== 0) return w
+        return new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
       })
     }
     return list
@@ -484,6 +484,15 @@ export default function CoachPortal({
           </button>
           <button
             type="button"
+            onClick={() => setTab('cancel_week')}
+            className={`flex-1 sm:flex-none px-4 py-2.5 rounded-xl text-sm font-bold transition-colors ${
+              tab === 'cancel_week' ? 'bg-[#062744] text-white' : 'text-[#213c57] hover:bg-[#f7f2e8]'
+            }`}
+          >
+            Cancel camp week
+          </button>
+          <button
+            type="button"
             onClick={() => setTab('emails')}
             className={`flex-1 sm:flex-none px-4 py-2.5 rounded-xl text-sm font-bold transition-colors ${
               tab === 'emails' ? 'bg-[#062744] text-white' : 'text-[#213c57] hover:bg-[#f7f2e8]'
@@ -583,14 +592,15 @@ export default function CoachPortal({
           </section>
         )}
 
-        {tab === 'registrations' && (
+        {tab === 'cancel_week' && (
           <section className="space-y-4">
             <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 sm:p-5">
-              <h2 className="text-sm font-bold text-[#062744] mb-2">Cancel entire camp week (low enrollment)</h2>
-              <p className="text-xs text-slate-700 mb-3">
+              <h2 className="text-lg font-bold text-[#062744] mb-2">Cancel entire camp week (low enrollment)</h2>
+              <p className="text-sm text-slate-700 mb-4">
                 If a week does not meet the minimum player count, cancel it here. Parents see <strong>staff cancelled</strong>{' '}
                 (not a refund request they made). Paid families get an automatic refund record and email; pending
-                registrations are declined.
+                registrations are declined. This action is separated from weekly report cards so it is not clicked by
+                mistake.
               </p>
               <div className="flex flex-col sm:flex-row sm:flex-wrap sm:items-end gap-3">
                 <label className="block text-sm">
@@ -617,13 +627,19 @@ export default function CoachPortal({
                 </button>
               </div>
             </div>
+          </section>
+        )}
+
+        {tab === 'registrations' && (
+          <section className="space-y-4">
             <p className="text-sm text-slate-600">
               Confirm after payment is received, or use <strong>Confirm with discount</strong> to reduce this
               week&apos;s price (up to ${CAMP_WEEK_PRICE_CENTS / 100}) and update the family total. Mark confirmed weeks{' '}
               <strong>complete</strong> after camp ends (parents can no longer request refunds). For refunds: approve or
               decline with a reason; after you approve, use <strong>Mark refund sent</strong> when the money has gone out
-              — parents see each step on their dashboard.
-              Sort by registration date or child name.
+              — parents see each step on their dashboard.{' '}
+              <strong>Sort:</strong> by camp week lists all players week-by-week (then by registration time); by player
+              name is alphabetical, then each player&apos;s weeks in camp order.
             </p>
             {registrations.length === 0 ? (
               <div className="bg-white border border-[#e8d8ce] rounded-2xl p-8 text-center text-slate-600">
@@ -642,7 +658,7 @@ export default function CoachPortal({
                         : 'bg-white text-[#213c57] border-[#e8d8ce] hover:bg-[#fffaf5]'
                     }`}
                   >
-                    By registration date
+                    By camp week (all players)
                   </button>
                   <button
                     type="button"
@@ -653,7 +669,7 @@ export default function CoachPortal({
                         : 'bg-white text-[#213c57] border-[#e8d8ce] hover:bg-[#fffaf5]'
                     }`}
                   >
-                    By child
+                    By player name
                   </button>
                 </div>
                 <div className="space-y-3">

@@ -102,7 +102,7 @@ function buildRegistrationsRows(
         status: 'pending',
         refund_requested_weeks: [],
         primary_position: child.primaryPosition.trim(),
-        secondary_position: child.secondaryPosition.trim(),
+        secondary_position: (child.secondaryPosition ?? '').trim(),
         playing_level: child.playerExperienceLevel === 'other' ? null : child.playerExperienceLevel,
         soccer_club: child.playerSoccerClub.trim(),
       })
@@ -142,8 +142,8 @@ export async function submitFamilyRegistration(data: FamilyRegistrationInput): P
     if (child.playerExperienceLevel === 'other' && !child.playerExperienceOther.trim()) {
       return { success: false, error: 'Please describe the experience level when you select Other.' }
     }
-    if (!child.primaryPosition.trim() || !child.secondaryPosition.trim()) {
-      return { success: false, error: 'Each player must have primary and secondary positions selected.' }
+    if (!child.primaryPosition.trim()) {
+      return { success: false, error: 'Each player must have a primary position selected.' }
     }
     if (!child.playerSoccerClub.trim()) {
       return { success: false, error: 'Please enter the soccer club or program each player is with this year.' }
@@ -200,14 +200,14 @@ export async function submitFamilyRegistration(data: FamilyRegistrationInput): P
     sort_order: index,
     player_first_name: child.playerFirstName,
     player_last_name: child.playerLastName,
-    player_pronouns: child.playerPronouns,
+    player_pronouns: (child.playerPronouns ?? '').trim(),
     player_dob: child.playerDob,
     player_gender: child.playerGender,
     player_experience_level: child.playerExperienceLevel,
     player_experience_other:
       child.playerExperienceLevel === 'other' ? child.playerExperienceOther.trim() || null : null,
     primary_position: child.primaryPosition.trim(),
-    secondary_position: child.secondaryPosition.trim(),
+    secondary_position: (child.secondaryPosition ?? '').trim(),
     grade_fall: child.gradeFall,
     school_fall: child.schoolFall.trim(),
     child_photo_url: child.childPhotoUrl.trim() || null,

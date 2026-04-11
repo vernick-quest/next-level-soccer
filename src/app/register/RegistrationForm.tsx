@@ -14,6 +14,7 @@ import { uploadChildPhoto } from '@/lib/supabase/storage-upload'
 import { CAMP_SESSIONS } from '@/lib/camp-weeks'
 import { SOCCER_CLUB_DATALIST_ID, SOCCER_CLUB_SUGGESTIONS } from '@/lib/soccer-club-suggestions'
 import { formatUsPhoneAsYouType, isCompleteUsPhone } from '@/lib/phone-mask'
+import { SOCCER_POSITION_CHOICES, soccerPositionLabel } from '@/lib/soccer-positions'
 
 const PRONOUNS_OPTIONS = [
   { value: 'He/Him', label: 'He/Him' },
@@ -39,20 +40,6 @@ const EXPERIENCE_LEVELS = [
   'ECNL',
   'MLS-Next',
   'other',
-] as const
-
-const SOCCER_POSITIONS = [
-  'GK',
-  'LB',
-  'CB',
-  'RB',
-  'CDM',
-  'CM',
-  'CAM',
-  'LW',
-  'RW',
-  'ST',
-  'CF',
 ] as const
 
 const GRADE_OPTIONS: { value: string; label: string }[] = [
@@ -427,7 +414,6 @@ export default function RegistrationForm({ additionalChildMode = false }: { addi
         return `Please complete player ${i + 1} name.`
       }
       if (!c.playerDob) return `Please enter date of birth for player ${i + 1}.`
-      if (!c.playerPronouns) return `Please select pronouns for player ${i + 1}.`
       if (!c.playerGender) return `Please select gender for player ${i + 1}.`
       if (!c.playerExperienceLevel) return `Please select playing level for player ${i + 1}.`
       if (c.playerExperienceLevel === 'other' && !c.playerExperienceOther.trim()) {
@@ -437,7 +423,6 @@ export default function RegistrationForm({ additionalChildMode = false }: { addi
         return `Please enter the soccer club or program for player ${i + 1}.`
       }
       if (!c.primaryPosition) return `Please select primary position for player ${i + 1}.`
-      if (!c.secondaryPosition) return `Please select secondary position for player ${i + 1}.`
       if (!c.gradeFall) return `Please select grade for player ${i + 1}.`
       if (!c.schoolFall.trim()) return `Please enter school for player ${i + 1}.`
       if (!c.campWeeks.length) return `Select at least one week for ${c.playerFirstName || `player ${i + 1}`}.`
@@ -510,7 +495,7 @@ export default function RegistrationForm({ additionalChildMode = false }: { addi
       playerExperienceOther: c.playerExperienceOther,
       playerSoccerClub: c.playerSoccerClub,
       primaryPosition: c.primaryPosition,
-      secondaryPosition: c.secondaryPosition,
+      secondaryPosition: c.secondaryPosition.trim(),
       gradeFall: c.gradeFall,
       schoolFall: c.schoolFall,
       childPhotoUrl: c.childPhotoUrl,
@@ -719,9 +704,9 @@ export default function RegistrationForm({ additionalChildMode = false }: { addi
                   </Select>
                 </div>
                 <div>
-                  <Label required>Pronouns</Label>
-                  <Select name="playerPronouns" value={child.playerPronouns} onChange={(e) => handleChildInput(child.id, e)} required>
-                    <option value="">Select pronouns</option>
+                  <Label>Pronouns (optional)</Label>
+                  <Select name="playerPronouns" value={child.playerPronouns} onChange={(e) => handleChildInput(child.id, e)}>
+                    <option value="">Prefer not to say / skip</option>
                     {PRONOUNS_OPTIONS.map((p) => (
                       <option key={p.value} value={p.value}>{p.label}</option>
                     ))}
@@ -783,23 +768,22 @@ export default function RegistrationForm({ additionalChildMode = false }: { addi
                     onChange={(e) => handleChildInput(child.id, e)}
                     required
                   >
-                    <option value="">Select position</option>
-                    {SOCCER_POSITIONS.map((pos) => (
-                      <option key={pos} value={pos}>{pos}</option>
+                    <option value="">Select primary position</option>
+                    {SOCCER_POSITION_CHOICES.map((pos) => (
+                      <option key={pos.value} value={pos.value}>{pos.label}</option>
                     ))}
                   </Select>
                 </div>
                 <div>
-                  <Label required>Secondary position</Label>
+                  <Label>Secondary position (optional)</Label>
                   <Select
                     name="secondaryPosition"
                     value={child.secondaryPosition}
                     onChange={(e) => handleChildInput(child.id, e)}
-                    required
                   >
-                    <option value="">Select position</option>
-                    {SOCCER_POSITIONS.map((pos) => (
-                      <option key={pos} value={pos}>{pos}</option>
+                    <option value="">None</option>
+                    {SOCCER_POSITION_CHOICES.map((pos) => (
+                      <option key={pos.value} value={pos.value}>{pos.label}</option>
                     ))}
                   </Select>
                 </div>
@@ -939,7 +923,8 @@ export default function RegistrationForm({ additionalChildMode = false }: { addi
                   <div>
                     <div className="font-semibold text-slate-900">{formatChildName(item)}</div>
                     <div className="text-slate-500 text-xs mt-0.5">
-                      {item.playerPronouns} · {item.playerGender === 'boy' ? 'Boy' : item.playerGender === 'girl' ? 'Girl' : ''} ·{' '}
+                      {item.playerPronouns ? `${item.playerPronouns} · ` : ''}
+                      {item.playerGender === 'boy' ? 'Boy' : item.playerGender === 'girl' ? 'Girl' : ''} ·{' '}
                       {gradeLabel(item.gradeFall)} · {item.schoolFall}
                       {item.playerExperienceLevel && (
                         <>
@@ -959,8 +944,10 @@ export default function RegistrationForm({ additionalChildMode = false }: { addi
                       {(item.primaryPosition || item.secondaryPosition) && (
                         <>
                           {' '}
-                          · Positions: {item.primaryPosition}
-                          {item.secondaryPosition ? ` / ${item.secondaryPosition}` : ''}
+                          · Positions: {soccerPositionLabel(item.primaryPosition)}
+                          {item.secondaryPosition.trim()
+                            ? ` / ${soccerPositionLabel(item.secondaryPosition)}`
+                            : ''}
                         </>
                       )}
                     </div>
