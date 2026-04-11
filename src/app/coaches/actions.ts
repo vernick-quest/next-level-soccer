@@ -24,6 +24,7 @@ import { resolveEmailTemplateFields } from '@/lib/email-templates-resolve'
 import { REPLY_TO_EMAIL, SENDER_EMAIL } from '@/lib/resend-sender'
 import { createClient } from '@/lib/supabase/server'
 import { createServiceRoleClient } from '@/lib/supabase/service'
+import { signChildProfilePhotoUrlsUnique } from '@/lib/supabase/child-profile-signed-url'
 
 const KNOWN_CAMP_WEEKS = new Set<string>(CAMP_SESSIONS)
 
@@ -135,7 +136,15 @@ export async function listPlayersForCoach(): Promise<{
     }
   })
 
-  return { players, error: null }
+  const signMap = await signChildProfilePhotoUrlsUnique(players.map((p) => p.child_photo_url))
+  const signedPlayers = players.map((p) => ({
+    ...p,
+    child_photo_url: p.child_photo_url?.trim()
+      ? (signMap.get(p.child_photo_url.trim()) ?? p.child_photo_url)
+      : null,
+  }))
+
+  return { players: signedPlayers, error: null }
 }
 
 export async function listCoachRegistrations(): Promise<{
@@ -200,7 +209,15 @@ export async function listCoachRegistrations(): Promise<{
     registration_submission_id: r.registration_submission_id,
   }))
 
-  return { rows, error: null }
+  const signMap = await signChildProfilePhotoUrlsUnique(rows.map((r) => r.child_photo_url))
+  const signedRows = rows.map((r) => ({
+    ...r,
+    child_photo_url: r.child_photo_url?.trim()
+      ? (signMap.get(r.child_photo_url.trim()) ?? r.child_photo_url)
+      : null,
+  }))
+
+  return { rows: signedRows, error: null }
 }
 
 export async function listCoachWeekReportRows(campSession: string): Promise<{
@@ -302,7 +319,15 @@ export async function listCoachWeekReportRows(campSession: string): Promise<{
     return a.player_first_name.localeCompare(b.player_first_name)
   })
 
-  return { players, error: null }
+  const signMap = await signChildProfilePhotoUrlsUnique(players.map((p) => p.child_photo_url))
+  const signedPlayers = players.map((p) => ({
+    ...p,
+    child_photo_url: p.child_photo_url?.trim()
+      ? (signMap.get(p.child_photo_url.trim()) ?? p.child_photo_url)
+      : null,
+  }))
+
+  return { players: signedPlayers, error: null }
 }
 
 export type RegistrationDecisionResult = { success: true } | { success: false; error: string }

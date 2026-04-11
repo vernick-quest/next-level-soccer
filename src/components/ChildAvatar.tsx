@@ -1,3 +1,7 @@
+'use client'
+
+import { useEffect, useState } from 'react'
+
 /**
  * Profile image for a child, or a simple meeple-style placeholder when no photo.
  */
@@ -12,12 +16,21 @@ export default function ChildAvatar({
   sizeClass?: string
   className?: string
 }) {
-  if (photoUrl) {
+  const [loadFailed, setLoadFailed] = useState(false)
+
+  useEffect(() => {
+    setLoadFailed(false)
+  }, [photoUrl])
+
+  if (photoUrl && !loadFailed) {
     return (
       <img
         src={photoUrl}
         alt={alt}
+        onError={() => setLoadFailed(true)}
         className={`${sizeClass} rounded-full object-cover border border-[#e8d8ce] shrink-0 ${className}`}
+        loading="lazy"
+        decoding="async"
       />
     )
   }

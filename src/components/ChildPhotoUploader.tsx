@@ -100,9 +100,8 @@ export default function ChildPhotoUploader({
           {isPending ? 'Saving…' : photoUrl ? 'Change photo' : 'Add photo'}
         </button>
         {label ? <span className="text-xs text-slate-600 truncate max-w-[14rem]">{label}</span> : null}
-        <span className="text-xs text-slate-500">
-          {CHILD_PROFILE_PHOTO_ACCEPT_LABEL}. Max 5 MB. Face-centered square crop for the circle.
-        </span>
+        <span className="text-xs text-slate-500">{CHILD_PROFILE_PHOTO_ACCEPT_LABEL}.</span>
+        <span className="text-xs text-slate-500">Max 5 MB.</span>
         {error ? <span className="text-xs text-red-600">{error}</span> : null}
       </div>
     </div>

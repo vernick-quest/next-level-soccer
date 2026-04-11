@@ -10,6 +10,7 @@ import { CAMP_WEEK_PRICE_CENTS as CAMP_PRICE_CENTS } from '@/lib/camp-pricing'
 import { CAMP_SESSIONS, campWeekSortIndex } from '@/lib/camp-weeks'
 import { createClient } from '@/lib/supabase/server'
 import { createServiceRoleClient } from '@/lib/supabase/service'
+import { signChildProfilePhotoUrlsUnique } from '@/lib/supabase/child-profile-signed-url'
 import { getOwnerEmail } from '@/lib/admin'
 import { getWeekSpotUsage, validateCampWeekCapacityForSubmission } from '@/lib/home-camp-spots'
 import { isRefundWindowOpenPacific } from '@/lib/refund-deadline'
@@ -214,6 +215,29 @@ function isHttpsPhotoUrl(url: string): boolean {
     return u.protocol === 'https:'
   } catch {
     return false
+  }
+}
+
+/** Replace stored public URLs with signed URLs so `<img>` works when the bucket is private. */
+async function applySignedUrlsToCampsAndIncrementalChildren(
+  camps: DashboardCamp[],
+  incrementalChildren: DashboardIncrementalChild[],
+): Promise<void> {
+  const signMap = await signChildProfilePhotoUrlsUnique([
+    ...camps.map((c) => c.childPhotoUrl),
+    ...incrementalChildren.map((ch) => ch.photoUrl),
+  ])
+  for (const c of camps) {
+    const u = c.childPhotoUrl?.trim()
+    if (u) {
+      c.childPhotoUrl = signMap.get(u) ?? c.childPhotoUrl
+    }
+  }
+  for (const ch of incrementalChildren) {
+    const u = ch.photoUrl?.trim()
+    if (u) {
+      ch.photoUrl = signMap.get(u) ?? ch.photoUrl
+    }
   }
 }
 
@@ -460,7 +484,9 @@ export async function getDashboardPageData(): Promise<{
 
   if (subErr) {
     console.error('getDashboardPageData submissions:', subErr)
-    return { camps: rowsToCamps(regRows, new Map()), incremental: null, children: [], error: 'fetch' }
+    const camps = rowsToCamps(regRows, new Map())
+    await applySignedUrlsToCampsAndIncrementalChildren(camps, [])
+    return { camps, incremental: null, children: [], error: 'fetch' }
   }
 
   const submissionIds = (submissions ?? []).map((s) => s.id)
@@ -471,6 +497,7 @@ export async function getDashboardPageData(): Promise<{
       weekRemaining[w] = usage?.[w]?.remaining ?? 0
     }
     const camps = rowsToCamps(regRows, new Map())
+    await applySignedUrlsToCampsAndIncrementalChildren(camps, [])
     const reportChildIds = allChildIdsForReports([], camps)
     const reportsByChildId = await fetchParentReportsMap(supabase, reportChildIds)
     const children = buildChildrenFromCampsOnly(camps, reportsByChildId)
@@ -506,6 +533,7 @@ export async function getDashboardPageData(): Promise<{
   if (chErr) {
     console.error('getDashboardPageData registration_children:', chErr)
     const camps = rowsToCamps(regRows, new Map())
+    await applySignedUrlsToCampsAndIncrementalChildren(camps, [])
     const reportChildIds = allChildIdsForReports([], camps)
     const reportsByChildId = await fetchParentReportsMap(supabase, reportChildIds)
     const children = buildChildrenFromCampsOnly(camps, reportsByChildId)
@@ -588,6 +616,8 @@ export async function getDashboardPageData(): Promise<{
     if (n !== 0) return n
     return a.firstName.localeCompare(b.firstName)
   })
+
+  await applySignedUrlsToCampsAndIncrementalChildren(camps, incrementalChildren)
 
   const reportChildIds = allChildIdsForReports(incrementalChildren, camps)
   const reportsByChildId = await fetchParentReportsMap(supabase, reportChildIds)
