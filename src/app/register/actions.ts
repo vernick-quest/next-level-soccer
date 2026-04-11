@@ -1,6 +1,7 @@
 'use server'
 
 import { Resend } from 'resend'
+import { CAMP_WEEK_PRICE_CENTS as CAMP_PRICE_CENTS } from '@/lib/camp-pricing'
 import { insertDenormalizedRegistrationRows } from '@/lib/denormalized-registrations-insert'
 import { validateCampWeekCapacityForSubmission } from '@/lib/home-camp-spots'
 import { buildEmailSubject } from '@/lib/email-template-interpolate'
@@ -54,7 +55,6 @@ export type ActionResult =
   | { success: true }
   | { success: false; error: string }
 
-const CAMP_PRICE_CENTS = 35_000
 
 /** Postgres `date` — HTML date input is usually YYYY-MM-DD; normalize edge cases. */
 function sanitizePlayerDobForDb(dob: string): string {

@@ -1,6 +1,7 @@
 'use client'
 
 import { campNameFromWeekLabel, campDatesFromWeekLabel } from '@/lib/camp-display'
+import { CAMP_WEEK_PRICE_CENTS } from '@/lib/camp-pricing'
 import { REFUND_DEADLINE_LABEL } from '@/lib/refund-deadline'
 import ChildAvatar from '@/components/ChildAvatar'
 import ChildPhotoUploader from '@/components/ChildPhotoUploader'
@@ -20,10 +21,16 @@ function formatDashboardTimestamp(iso: string | null | undefined) {
   return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
 }
 
+function formatUsdFromCents(cents: number) {
+  return `$${(cents / 100).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`
+}
+
 function weekStatusLabel(status: DashboardWeekStatus): string {
   switch (status) {
     case 'confirmed':
       return 'Paid / confirmed'
+    case 'confirmed_with_discount':
+      return 'Paid / confirmed (staff discount)'
     case 'pending':
       return 'Registered (payment pending)'
     case 'refund_requested':
@@ -56,6 +63,8 @@ function weekTileClasses(status: DashboardWeekStatus): string {
   switch (status) {
     case 'confirmed':
       return `${base} border-emerald-500 bg-emerald-50 text-emerald-950 shadow-sm`
+    case 'confirmed_with_discount':
+      return `${base} border-emerald-500 bg-emerald-50 text-emerald-950 shadow-sm ring-2 ring-amber-400/70 ring-offset-1`
     case 'pending':
       return `${base} border-amber-400 bg-amber-50 text-amber-950`
     case 'refund_requested':
@@ -155,6 +164,16 @@ function weekStatusFootnote(tile: DashboardWeekTile, camps: DashboardCamp[]) {
       </p>
     )
   }
+  if (tile.status === 'confirmed_with_discount' && camp.coachDiscountCents > 0) {
+    const due = Math.max(0, CAMP_WEEK_PRICE_CENTS - camp.coachDiscountCents)
+    return (
+      <p className="text-[10px] text-emerald-900 mt-1.5 leading-snug">
+        <span className="font-semibold">Staff discount applied: </span>
+        {formatUsdFromCents(camp.coachDiscountCents)} off the standard week price of {formatUsdFromCents(CAMP_WEEK_PRICE_CENTS)}. Amount due for this week:{' '}
+        <span className="font-semibold">{formatUsdFromCents(due)}</span> (your registration total was updated).
+      </p>
+    )
+  }
   if (tile.status === 'organizer_cancelled' && camp.organizerCancelledAt) {
     if (camp.refundMoneySentAt) {
       return (
@@ -210,8 +229,10 @@ export default function ChildDashboardPanel({
     const camp = tile.registrationId ? findCamp(camps, tile.registrationId) : undefined
     if (!camp) return null
     const canCancel = camp.displayStatus === 'pending'
-    const canRequestRefund = refundWindowOpen && camp.displayStatus === 'confirmed'
-    if (!canCancel && camp.displayStatus !== 'confirmed') return null
+    const isPaidConfirmed =
+      camp.displayStatus === 'confirmed' || camp.displayStatus === 'confirmed_with_discount'
+    const canRequestRefund = refundWindowOpen && isPaidConfirmed
+    if (!canCancel && !isPaidConfirmed) return null
     return (
       <div className="mt-2 flex flex-wrap gap-2">
         {canCancel && (
@@ -224,7 +245,7 @@ export default function ChildDashboardPanel({
             Cancel
           </button>
         )}
-        {camp.displayStatus === 'confirmed' && (
+        {isPaidConfirmed && (
           <>
             <button
               type="button"
@@ -273,6 +294,13 @@ export default function ChildDashboardPanel({
           <span className="inline-flex items-center gap-1.5">
             <span className="inline-block w-3 h-3 rounded-sm bg-emerald-500 border border-emerald-600" aria-hidden />
             Paid / confirmed
+          </span>
+          <span className="inline-flex items-center gap-1.5">
+            <span
+              className="inline-block w-3 h-3 rounded-sm bg-emerald-500 border border-emerald-600 ring-2 ring-amber-400/80 ring-offset-0"
+              aria-hidden
+            />
+            Paid / confirmed (staff discount)
           </span>
           <span className="inline-flex items-center gap-1.5">
             <span className="inline-block w-3 h-3 rounded-sm bg-amber-400 border border-amber-500" aria-hidden />

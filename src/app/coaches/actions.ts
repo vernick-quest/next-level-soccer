@@ -12,6 +12,7 @@ import {
   htmlRegistrationDeclined,
 } from '@/lib/coach-portal-emails'
 import { campNameFromWeekLabel } from '@/lib/camp-display'
+import { CAMP_WEEK_PRICE_CENTS } from '@/lib/camp-pricing'
 import { CAMP_SESSIONS } from '@/lib/camp-weeks'
 import {
   COACH_REPORT_METRIC_KEYS,
@@ -54,6 +55,7 @@ export type CoachRegistrationRow = {
   refund_approved_at: string | null
   refund_money_sent_at: string | null
   organizer_cancelled_at: string | null
+  coach_discount_cents: number
   player_first_name: string | null
   player_last_name: string | null
   parent_first_name: string | null
@@ -158,6 +160,7 @@ export async function listCoachRegistrations(): Promise<{
       refund_approved_at,
       refund_money_sent_at,
       organizer_cancelled_at,
+      coach_discount_cents,
       player_first_name,
       player_last_name,
       parent_first_name,
@@ -185,6 +188,7 @@ export async function listCoachRegistrations(): Promise<{
     refund_approved_at: (r as { refund_approved_at?: string | null }).refund_approved_at ?? null,
     refund_money_sent_at: (r as { refund_money_sent_at?: string | null }).refund_money_sent_at ?? null,
     organizer_cancelled_at: (r as { organizer_cancelled_at?: string | null }).organizer_cancelled_at ?? null,
+    coach_discount_cents: Number((r as { coach_discount_cents?: number | null }).coach_discount_cents ?? 0) || 0,
     player_first_name: r.player_first_name,
     player_last_name: r.player_last_name,
     parent_first_name: r.parent_first_name,
@@ -302,8 +306,10 @@ export type RegistrationDecisionResult = { success: true } | { success: false; e
 
 export async function setRegistrationDecision(input: {
   registrationId: string
-  decision: 'confirmed' | 'declined'
+  decision: 'confirmed' | 'declined' | 'discounted'
   declineReason?: string
+  /** Required for `discounted`: whole-week discount in USD cents, 1 … list price. */
+  discountCents?: number
 }): Promise<RegistrationDecisionResult> {
   const staffUser = await getStaffAdminUser()
   if (!staffUser) {
@@ -322,10 +328,20 @@ export async function setRegistrationDecision(input: {
     return { success: false, error: 'Please enter a reason for declining this registration.' }
   }
 
+  if (input.decision === 'discounted') {
+    const dc = input.discountCents
+    if (typeof dc !== 'number' || !Number.isInteger(dc) || dc < 1 || dc > CAMP_WEEK_PRICE_CENTS) {
+      return {
+        success: false,
+        error: `Discount must be a whole dollar amount between $1 and $${CAMP_WEEK_PRICE_CENTS / 100} for this camp week (not more than the week price).`,
+      }
+    }
+  }
+
   const { data: row, error: fetchErr } = await service
     .from('registrations')
     .select(
-      'id, parent_email, parent_first_name, player_first_name, player_last_name, camp_session, status',
+      'id, parent_email, parent_first_name, player_first_name, player_last_name, camp_session, status, registration_submission_id',
     )
     .eq('id', input.registrationId)
     .single()
@@ -339,18 +355,48 @@ export async function setRegistrationDecision(input: {
     return { success: false, error: 'This registration has already been finalized.' }
   }
 
-  const nextStatus = input.decision === 'confirmed' ? 'confirmed' : 'declined'
+  const isDiscounted = input.decision === 'discounted'
+  const nextStatus = input.decision === 'declined' ? 'declined' : 'confirmed'
+  const discountCents = isDiscounted ? (input.discountCents as number) : 0
+
   const { error: upErr } = await service
     .from('registrations')
     .update({
       status: nextStatus,
       decline_reason: input.decision === 'declined' ? reason : null,
+      coach_discount_cents: nextStatus === 'confirmed' ? discountCents : 0,
     })
     .eq('id', input.registrationId)
 
   if (upErr) {
     console.error('setRegistrationDecision:', upErr)
-    return { success: false, error: 'Could not update registration.' }
+    return {
+      success: false,
+      error:
+        upErr.message?.includes('coach_discount') || upErr.message?.includes('column')
+          ? 'Could not save. Add column coach_discount_cents on registrations (see supabase-schema.sql).'
+          : 'Could not update registration.',
+    }
+  }
+
+  const submissionId = ((row as { registration_submission_id?: string | null }).registration_submission_id ?? '').trim()
+  if (isDiscounted && discountCents > 0 && submissionId) {
+    const { data: sub, error: subFetchErr } = await service
+      .from('registration_submissions')
+      .select('total_amount_cents')
+      .eq('id', submissionId)
+      .single()
+    if (!subFetchErr && sub) {
+      const cur = Number(sub.total_amount_cents ?? 0)
+      const next = Math.max(0, cur - discountCents)
+      const { error: subUpErr } = await service
+        .from('registration_submissions')
+        .update({ total_amount_cents: next })
+        .eq('id', submissionId)
+      if (subUpErr) {
+        console.error('setRegistrationDecision submission total:', subUpErr)
+      }
+    }
   }
 
   const apiKey = process.env.RESEND_API_KEY
@@ -362,13 +408,15 @@ export async function setRegistrationDecision(input: {
   if (apiKey && parentEmail) {
     const resend = new Resend(apiKey)
     const subjVars = { playerName, campWeekLabel: weekLabel }
-    if (input.decision === 'confirmed') {
+    if (input.decision === 'confirmed' || input.decision === 'discounted') {
       const copy = await resolveEmailTemplateFields('registration_confirmed')
       const html = htmlRegistrationConfirmed(
         {
           parentFirstName: parentFirst,
           playerName,
           campWeekLabel: weekLabel,
+          discountCents: isDiscounted ? discountCents : 0,
+          weekListPriceCents: CAMP_WEEK_PRICE_CENTS,
         },
         copy,
       )

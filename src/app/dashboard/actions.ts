@@ -6,6 +6,7 @@ import { resolveEmailTemplateFields } from '@/lib/email-templates-resolve'
 import { insertDenormalizedRegistrationRows } from '@/lib/denormalized-registrations-insert'
 import { REPLY_TO_EMAIL, SENDER_EMAIL } from '@/lib/resend-sender'
 import { buildAdditionalWeeksEmailHtml } from '@/lib/transactional-parent-email-html'
+import { CAMP_WEEK_PRICE_CENTS as CAMP_PRICE_CENTS } from '@/lib/camp-pricing'
 import { CAMP_SESSIONS, campWeekSortIndex } from '@/lib/camp-weeks'
 import { createClient } from '@/lib/supabase/server'
 import { createServiceRoleClient } from '@/lib/supabase/service'
@@ -14,7 +15,6 @@ import { getWeekSpotUsage, validateCampWeekCapacityForSubmission } from '@/lib/h
 import { isRefundWindowOpenPacific } from '@/lib/refund-deadline'
 import { ALL_REPORT_METRIC_KEYS, type ReportMetricKey } from '@/lib/player-report-metrics'
 
-const CAMP_PRICE_CENTS = 35_000
 const KNOWN_WEEKS = new Set<string>(CAMP_SESSIONS)
 
 /** One row in `public.registrations` (camp week + player). */
@@ -30,6 +30,7 @@ export type DashboardCamp = {
   displayStatus:
     | 'pending'
     | 'confirmed'
+    | 'confirmed_with_discount'
     | 'refund_requested'
     | 'declined'
     | 'completed'
@@ -44,6 +45,8 @@ export type DashboardCamp = {
   organizerCancelledAt: string | null
   /** Set when staff declines this week (parent-facing dashboard). */
   declineReason: string | null
+  /** Staff-applied discount for this week (cents); only when confirmed with discount. */
+  coachDiscountCents: number
 }
 
 export type DashboardIncrementalChild = {
@@ -63,6 +66,7 @@ export type DashboardIncrementalChild = {
 /** Camp week tile for the child-centric dashboard. */
 export type DashboardWeekStatus =
   | 'confirmed'
+  | 'confirmed_with_discount'
   | 'pending'
   | 'refund_requested'
   | 'declined'
@@ -111,6 +115,7 @@ type RegistrationRowForDisplay = {
   refund_denial_reason?: string | null
   organizer_cancelled_at?: string | null
   decline_reason?: string | null
+  coach_discount_cents?: number | null
 }
 
 function displayStatusForRegistrationRow(row: RegistrationRowForDisplay): DashboardCamp['displayStatus'] {
@@ -126,7 +131,11 @@ function displayStatusForRegistrationRow(row: RegistrationRowForDisplay): Dashbo
   if ((row.refund_denial_reason ?? '').trim()) return 'refund_denied'
   if (st === 'declined') return 'declined'
   if (st === 'refund_requested') return 'refund_requested'
-  if (st === 'confirmed') return 'confirmed'
+  if (st === 'confirmed') {
+    const disc = Number(row.coach_discount_cents ?? 0) || 0
+    if (disc > 0) return 'confirmed_with_discount'
+    return 'confirmed'
+  }
   return 'pending'
 }
 
@@ -163,6 +172,7 @@ function rowsToCamps(
     refund_denial_reason?: string | null
     organizer_cancelled_at?: string | null
     decline_reason?: string | null
+    coach_discount_cents?: number | null
   }[],
   childIdBySubmissionAndName: Map<string, string>,
 ): DashboardCamp[] {
@@ -192,6 +202,7 @@ function rowsToCamps(
       refundDenialReason: row.refund_denial_reason ?? null,
       organizerCancelledAt: row.organizer_cancelled_at ?? null,
       declineReason: row.decline_reason ?? null,
+      coachDiscountCents: Number(row.coach_discount_cents ?? 0) || 0,
     })
   }
   return camps
@@ -290,6 +301,8 @@ function weekTilesForIncrementalChild(
     if (existing) {
       const ds = existing.displayStatus
       const rid = existing.registrationId ? existing.registrationId : null
+      if (ds === 'confirmed_with_discount')
+        return { week, status: 'confirmed_with_discount' as const, registrationId: rid }
       if (ds === 'confirmed') return { week, status: 'confirmed' as const, registrationId: rid }
       if (ds === 'refund_requested') return { week, status: 'refund_requested' as const, registrationId: rid }
       if (ds === 'declined') return { week, status: 'declined' as const, registrationId: rid }
@@ -316,6 +329,9 @@ function weekTilesFromCampsOnly(campsForChild: DashboardCamp[]): DashboardWeekTi
   return CAMP_SESSIONS.map((week) => {
     const camp = byWeek.get(week)
     if (!camp) return { week, status: 'unavailable' as const, registrationId: null }
+    if (camp.displayStatus === 'confirmed_with_discount') {
+      return { week, status: 'confirmed_with_discount', registrationId: camp.registrationId }
+    }
     if (camp.displayStatus === 'confirmed') return { week, status: 'confirmed', registrationId: camp.registrationId }
     if (camp.displayStatus === 'refund_requested') {
       return { week, status: 'refund_requested', registrationId: camp.registrationId }
@@ -423,6 +439,7 @@ export async function getDashboardPageData(): Promise<{
       refund_denial_reason,
       organizer_cancelled_at,
       decline_reason,
+      coach_discount_cents,
       created_at
     `,
     )
@@ -828,6 +845,7 @@ function registrationInsertRowFromTemplate(
     emergency_contact_phone: template.emergency_contact_phone,
     status: 'pending',
     refund_requested_weeks: [],
+    coach_discount_cents: 0,
     primary_position: template.primary_position,
     secondary_position: template.secondary_position,
     playing_level: template.playing_level ?? null,
@@ -863,6 +881,7 @@ function registrationInsertRowFromChild(
     emergency_contact_phone: child.emergency_contact_phone,
     status: 'pending',
     refund_requested_weeks: [],
+    coach_discount_cents: 0,
     primary_position: child.primary_position,
     secondary_position: child.secondary_position,
     playing_level: level,

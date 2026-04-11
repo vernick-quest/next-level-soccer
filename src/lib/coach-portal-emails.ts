@@ -1,5 +1,6 @@
 import { REPORT_CARD_RATING_SCALE_DOC, REPORT_CARD_SKILL_PILLARS_DOC } from '@/lib/report-card-doc-reference'
 import { REPORT_METRIC_GROUPS, type CoachReportMetricKey } from '@/lib/player-report-metrics'
+import { CAMP_WEEK_PRICE_CENTS } from '@/lib/camp-pricing'
 import { REPORT_CARD_GUIDE_URL } from '@/lib/email-template-catalog'
 import { interpolateTemplate } from '@/lib/email-template-interpolate'
 import { escapeHtml } from '@/lib/html-escape'
@@ -25,20 +26,43 @@ function preline(
   return escapeHtml(raw).replace(/\n/g, '<br/>')
 }
 
+function dollarsFromCents(cents: number): string {
+  return `$${(cents / 100).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`
+}
+
 export function htmlRegistrationConfirmed(
-  params: { parentFirstName: string; playerName: string; campWeekLabel: string },
+  params: {
+    parentFirstName: string
+    playerName: string
+    campWeekLabel: string
+    /** When &gt; 0, discount paragraph is included (staff discounted confirm). */
+    discountCents?: number
+    /** List price for this week in cents (defaults to standard week price). */
+    weekListPriceCents?: number
+  },
   fields: Record<string, string>,
 ) {
+  const listCents = params.weekListPriceCents ?? CAMP_WEEK_PRICE_CENTS
+  const disc = Math.max(0, params.discountCents ?? 0)
+  const due = Math.max(0, listCents - disc)
   const vars = {
     parentFirstName: params.parentFirstName,
     playerName: params.playerName,
     campWeekLabel: params.campWeekLabel,
+    discountDollars: dollarsFromCents(disc),
+    weekPriceDollars: dollarsFromCents(listCents),
+    amountDueDollars: dollarsFromCents(due),
   }
+  const discountBlock =
+    disc > 0
+      ? `<p style="background:#ecfdf5;border:1px solid #a7f3d0;border-radius:12px;padding:12px 14px;margin-top:12px;">${line('discountParagraph', fields, vars)}</p>`
+      : ''
   return `
   <div style="font-family: system-ui, sans-serif; max-width: 560px; line-height: 1.55; color: #1e293b;">
     <h1 style="color: #062744; font-size: 22px;">${line('heading', fields, vars)}</h1>
     <p>Hi ${escapeHtml(params.parentFirstName)},</p>
     <p style="white-space:pre-wrap;">${line('confirmedParagraph', fields, vars)}</p>
+    ${discountBlock}
     <p>${line('bodyClosing', fields, vars)}</p>
     <p style="margin-top: 2rem; color: #64748b; font-size: 14px;">${line('signOff', fields, vars)}</p>
   </div>`

@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
 import { CAMP_SESSIONS } from '@/lib/camp-weeks'
 import { campNameFromWeekLabel } from '@/lib/camp-display'
+import { CAMP_WEEK_PRICE_CENTS } from '@/lib/camp-pricing'
 import { REPORT_CARD_RATING_SCALE_DOC } from '@/lib/report-card-doc-reference'
 import {
   COACH_REPORT_METRIC_KEYS,
@@ -82,6 +83,7 @@ export default function CoachPortal({
   const [scoresByChild, setScoresByChild] = useState<Record<string, Record<CoachReportMetricKey, '' | number>>>({})
   const [commentsByChild, setCommentsByChild] = useState<Record<string, string>>({})
   const [declineReasons, setDeclineReasons] = useState<Record<string, string>>({})
+  const [discountDollarsById, setDiscountDollarsById] = useState<Record<string, string>>({})
   const [refundDeclineReasons, setRefundDeclineReasons] = useState<Record<string, string>>({})
   const [sortRegistrationsBy, setSortRegistrationsBy] = useState<'date' | 'child'>('date')
   const [cancelWeekSession, setCancelWeekSession] = useState<string>(CAMP_SESSIONS[0] ?? '')
@@ -206,9 +208,53 @@ export default function CoachPortal({
         return
       }
       setRegistrations((rows) =>
-        rows.map((x) => (x.id === id ? { ...x, status: 'confirmed', decline_reason: null } : x)),
+        rows.map((x) =>
+          x.id === id ? { ...x, status: 'confirmed', decline_reason: null, coach_discount_cents: 0 } : x,
+        ),
       )
       setMessage({ type: 'ok', text: 'Confirmed and parent emailed.' })
+      await refreshWeekPlayers(campSession)
+      await refreshRegistrations()
+    })
+  }
+
+  function confirmWithDiscount(id: string) {
+    const raw = (discountDollarsById[id] ?? '').trim()
+    const dollars = Number.parseFloat(raw)
+    if (!Number.isFinite(dollars) || dollars <= 0) {
+      setMessage({ type: 'err', text: 'Enter a discount greater than $0 (e.g. 25 for twenty-five dollars off).' })
+      return
+    }
+    const cents = Math.round(dollars * 100)
+    if (cents < 1 || cents > CAMP_WEEK_PRICE_CENTS) {
+      setMessage({
+        type: 'err',
+        text: `Discount must be between $0.01 and $${CAMP_WEEK_PRICE_CENTS / 100} for one camp week (cannot exceed the week price).`,
+      })
+      return
+    }
+    setMessage(null)
+    startTransition(async () => {
+      const r = await setRegistrationDecision({
+        registrationId: id,
+        decision: 'discounted',
+        discountCents: cents,
+      })
+      if (!r.success) {
+        setMessage({ type: 'err', text: r.error })
+        return
+      }
+      setRegistrations((rows) =>
+        rows.map((x) =>
+          x.id === id ? { ...x, status: 'confirmed', decline_reason: null, coach_discount_cents: cents } : x,
+        ),
+      )
+      setDiscountDollarsById((prev) => {
+        const next = { ...prev }
+        delete next[id]
+        return next
+      })
+      setMessage({ type: 'ok', text: 'Confirmed with discount; parent emailed and family total updated.' })
       await refreshWeekPlayers(campSession)
       await refreshRegistrations()
     })
@@ -572,9 +618,11 @@ export default function CoachPortal({
               </div>
             </div>
             <p className="text-sm text-slate-600">
-              Confirm after payment is received. Mark confirmed weeks <strong>complete</strong> after camp ends (parents
-              can no longer request refunds). For refunds: approve or decline with a reason; after you approve, use{' '}
-              <strong>Mark refund sent</strong> when the money has gone out — parents see each step on their dashboard.
+              Confirm after payment is received, or use <strong>Confirm with discount</strong> to reduce this
+              week&apos;s price (up to ${CAMP_WEEK_PRICE_CENTS / 100}) and update the family total. Mark confirmed weeks{' '}
+              <strong>complete</strong> after camp ends (parents can no longer request refunds). For refunds: approve or
+              decline with a reason; after you approve, use <strong>Mark refund sent</strong> when the money has gone out
+              — parents see each step on their dashboard.
               Sort by registration date or child name.
             </p>
             {registrations.length === 0 ? (
@@ -620,6 +668,7 @@ export default function CoachPortal({
                       !row.refund_money_sent_at &&
                       !refundPending
                     const completed = !!row.camp_completed_at
+                    const discCents = row.coach_discount_cents ?? 0
                     const statusLabel = organizerCancelled
                       ? 'camp cancelled (staff)'
                       : completed
@@ -632,7 +681,9 @@ export default function CoachPortal({
                               ? 'refund processing'
                               : row.refund_denial_reason?.trim()
                                 ? 'refund denied'
-                                : st
+                                : st === 'confirmed' && discCents > 0
+                                  ? 'confirmed (discount)'
+                                  : st
                     const showMarkComplete =
                       st === 'confirmed' &&
                       !completed &&
@@ -676,6 +727,21 @@ export default function CoachPortal({
                                 Refund recorded as sent {formatRegistrationDate(row.refund_money_sent_at)}.
                               </p>
                             ) : null}
+                            {st === 'confirmed' && discCents > 0 ? (
+                              <p className="mt-2 text-xs text-emerald-900 bg-emerald-50 border border-emerald-100 rounded-lg px-3 py-2">
+                                <strong>Staff discount on file:</strong>{' '}
+                                {(discCents / 100).toLocaleString('en-US', {
+                                  style: 'currency',
+                                  currency: 'USD',
+                                })}{' '}
+                                off the standard {CAMP_WEEK_PRICE_CENTS / 100}-dollar week (
+                                {(Math.max(0, CAMP_WEEK_PRICE_CENTS - discCents) / 100).toLocaleString('en-US', {
+                                  style: 'currency',
+                                  currency: 'USD',
+                                })}{' '}
+                                due for this week).
+                              </p>
+                            ) : null}
                           </div>
                           <div className="flex flex-col items-end gap-2 w-full sm:w-auto">
                             <span
@@ -693,7 +759,9 @@ export default function CoachPortal({
                                           : row.refund_denial_reason?.trim()
                                             ? 'bg-rose-100 text-rose-900'
                                             : st === 'confirmed'
-                                              ? 'bg-emerald-100 text-emerald-900'
+                                              ? discCents > 0
+                                                ? 'bg-emerald-100 text-emerald-900 ring-2 ring-amber-300'
+                                                : 'bg-emerald-100 text-emerald-900'
                                               : st === 'declined'
                                                 ? 'bg-rose-100 text-rose-900'
                                                 : 'bg-amber-100 text-amber-900'
@@ -744,6 +812,38 @@ export default function CoachPortal({
                                     className="mt-1 w-full border border-[#e8d8ce] rounded-xl px-3 py-2 text-sm resize-y min-h-[4.5rem]"
                                   />
                                 </label>
+                                <div className="w-full border-t border-[#e8d8ce] pt-3 text-left sm:text-right">
+                                  <p className="text-xs text-slate-600 mb-2">
+                                    <strong>Discount:</strong> confirm at a reduced price for this week only{' '}
+                                    {`(max $${CAMP_WEEK_PRICE_CENTS / 100})`}. The family&apos;s registration total is
+                                    reduced by the same amount; the parent is emailed with the discount and amount due.
+                                  </p>
+                                  <div className="flex flex-col sm:flex-row sm:flex-wrap sm:items-end gap-2 sm:justify-end">
+                                    <label className="block text-left sm:text-right">
+                                      <span className="text-xs font-semibold text-slate-600">Discount ($)</span>
+                                      <input
+                                        type="number"
+                                        min={0.01}
+                                        step={0.01}
+                                        max={CAMP_WEEK_PRICE_CENTS / 100}
+                                        value={discountDollarsById[row.id] ?? ''}
+                                        onChange={(e) =>
+                                          setDiscountDollarsById((prev) => ({ ...prev, [row.id]: e.target.value }))
+                                        }
+                                        placeholder="e.g. 50"
+                                        className="mt-1 w-full sm:w-32 border border-[#e8d8ce] rounded-xl px-3 py-2 text-sm bg-white"
+                                      />
+                                    </label>
+                                    <button
+                                      type="button"
+                                      onClick={() => confirmWithDiscount(row.id)}
+                                      disabled={isPending}
+                                      className="shrink-0 text-sm font-bold bg-[#062744] hover:bg-[#041f36] text-white px-4 py-2 rounded-full disabled:opacity-50"
+                                    >
+                                      Confirm with discount
+                                    </button>
+                                  </div>
+                                </div>
                               </div>
                             )}
                             {refundPending && (

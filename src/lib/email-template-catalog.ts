@@ -82,12 +82,19 @@ export const EMAIL_TEMPLATE_SPECS: Record<EmailTemplateKey, EmailTemplateSpec> =
   },
   registration_confirmed: {
     label: 'Registration confirmed (coach)',
-    description: 'When staff confirms a pending registration after payment.',
-    placeholders: '{{parentFirstName}}, {{playerName}}, {{campWeekLabel}}',
+    description:
+      'When staff confirms a pending registration after payment. Discount paragraph is only sent when a staff discount is applied.',
+    placeholders:
+      '{{parentFirstName}}, {{playerName}}, {{campWeekLabel}}, {{discountDollars}}, {{weekPriceDollars}}, {{amountDueDollars}}',
     fields: [
       { id: 'subjectTemplate', label: 'Subject line' },
       { id: 'heading', label: 'Main heading' },
       { id: 'confirmedParagraph', label: 'Confirmation paragraph', multiline: true },
+      {
+        id: 'discountParagraph',
+        label: 'Extra paragraph when a discount is applied (discount / list / amount due)',
+        multiline: true,
+      },
       { id: 'bodyClosing', label: 'Closing paragraph', multiline: true },
       { id: 'signOff', label: 'Sign-off line' },
     ],
@@ -235,6 +242,8 @@ export const EMAIL_TEMPLATE_DEFAULTS: Record<EmailTemplateKey, Record<string, st
     heading: 'Camp registration confirmed',
     confirmedParagraph:
       '{{playerName}} is confirmed for {{campWeekLabel}}.',
+    discountParagraph:
+      'A staff discount of {{discountDollars}} has been applied to this camp week (list price {{weekPriceDollars}} for the week). Please pay {{amountDueDollars}} for this week when you send payment — your registration total has been updated to match.',
     bodyClosing: 'We look forward to seeing you at Beach Chalet. If you have questions, reply to this email.',
     signOff: `— ${ORG}`,
   },

@@ -303,6 +303,18 @@ alter table public.registrations add column if not exists refund_approved_at tim
 alter table public.registrations add column if not exists refund_money_sent_at timestamptz;
 alter table public.registrations add column if not exists organizer_cancelled_at timestamptz;
 
+-- Staff-applied discount for this camp week (USD cents); only when status is confirmed. Max = one week list price.
+alter table public.registrations add column if not exists coach_discount_cents int not null default 0;
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint where conname = 'registrations_coach_discount_cents_check'
+  ) then
+    alter table public.registrations add constraint registrations_coach_discount_cents_check
+      check (coach_discount_cents >= 0 and coach_discount_cents <= 35000);
+  end if;
+end $$;
+
 alter table player_reports enable row level security;
 
 do $$
