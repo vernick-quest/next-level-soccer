@@ -11,6 +11,14 @@ import {
 import GoogleOAuthButton from '@/components/GoogleOAuthButton'
 import ParentEmailAuthPanel from '@/components/ParentEmailAuthPanel'
 import { uploadChildPhoto } from '@/lib/supabase/storage-upload'
+import ChildAvatar from '@/components/ChildAvatar'
+import {
+  CHILD_PROFILE_PHOTO_ACCEPT,
+  CHILD_PROFILE_PHOTO_ACCEPT_LABEL,
+  CHILD_PROFILE_PHOTO_MAX_BYTES,
+  isChildProfilePhotoMime,
+  processChildPhotoForUpload,
+} from '@/lib/child-photo-face-crop'
 import { CAMP_SESSIONS } from '@/lib/camp-weeks'
 import { SOCCER_CLUB_DATALIST_ID, SOCCER_CLUB_SUGGESTIONS } from '@/lib/soccer-club-suggestions'
 import { formatUsPhoneAsYouType, isCompleteUsPhone } from '@/lib/phone-mask'
@@ -207,6 +215,34 @@ function SectionHeader({ step, title }: { step: number; title: string }) {
   )
 }
 
+function useChildPhotoPreviewUrl(file: File | null) {
+  const [url, setUrl] = useState<string | null>(null)
+  useEffect(() => {
+    if (!file) {
+      setUrl(null)
+      return
+    }
+    const u = URL.createObjectURL(file)
+    setUrl(u)
+    return () => URL.revokeObjectURL(u)
+  }, [file])
+  return url
+}
+
+function RegChildPhotoAvatar({
+  file,
+  storedUrl,
+  name,
+}: {
+  file: File | null
+  storedUrl: string
+  name: string
+}) {
+  const blobUrl = useChildPhotoPreviewUrl(file)
+  const src = (blobUrl ?? storedUrl.trim()) || null
+  return <ChildAvatar photoUrl={src} alt={name || 'Player'} sizeClass="w-10 h-10" />
+}
+
 export default function RegistrationForm({ additionalChildMode = false }: { additionalChildMode?: boolean }) {
   const [step, setStep] = useState<Step>(1)
   const [parent, setParent] = useState<ParentInfoState>(emptyParent)
@@ -218,6 +254,7 @@ export default function RegistrationForm({ additionalChildMode = false }: { addi
   const [isPending, startTransition] = useTransition()
   const [submitted, setSubmitted] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [photoChildIdBusy, setPhotoChildIdBusy] = useState<string | null>(null)
   /** Honeypot — must stay empty; bots often fill hidden fields. */
   const [hpCompany, setHpCompany] = useState('')
 
@@ -343,8 +380,29 @@ export default function RegistrationForm({ additionalChildMode = false }: { addi
     updateChild(id, { [name]: value } as Partial<ChildFormState>)
   }
 
-  function handlePhotoChange(id: string, file: File | null) {
-    updateChild(id, { childPhotoFile: file })
+  async function handlePhotoFileChosen(childId: string, file: File | null) {
+    if (!file) {
+      updateChild(childId, { childPhotoFile: null })
+      return
+    }
+    if (!isChildProfilePhotoMime(file.type)) {
+      setError(`Photo must be one of: ${CHILD_PROFILE_PHOTO_ACCEPT_LABEL}.`)
+      return
+    }
+    if (file.size > CHILD_PROFILE_PHOTO_MAX_BYTES) {
+      setError('Photo must be 5 MB or smaller.')
+      return
+    }
+    setError(null)
+    setPhotoChildIdBusy(childId)
+    try {
+      const processed = await processChildPhotoForUpload(file)
+      updateChild(childId, { childPhotoFile: processed })
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not process photo.')
+    } finally {
+      setPhotoChildIdBusy(null)
+    }
   }
 
   function handleExperienceLevelChange(id: string, value: string) {
@@ -547,13 +605,15 @@ export default function RegistrationForm({ additionalChildMode = false }: { addi
           {childrenList.map((item) => (
             <div key={item.id} className="mb-2 last:mb-0">
               <strong>{formatChildName(item) || 'Player'}:</strong> {item.campWeeks.join(', ')}
-              {item.childPhotoUrl && (
-                <img
-                  src={item.childPhotoUrl}
-                  alt={`${formatChildName(item) || 'Player'} profile`}
-                  className="w-12 h-12 rounded-full object-cover border border-[#e8d8ce] mt-2"
-                />
-              )}
+              {item.childPhotoUrl ? (
+                <div className="mt-2">
+                  <ChildAvatar
+                    photoUrl={item.childPhotoUrl}
+                    alt={`${formatChildName(item) || 'Player'} profile`}
+                    sizeClass="w-12 h-12"
+                  />
+                </div>
+              ) : null}
             </div>
           ))}
           <div className="mt-3 font-bold">Total due: ${calculateTotal()}</div>
@@ -802,26 +862,37 @@ export default function RegistrationForm({ additionalChildMode = false }: { addi
                 </div>
                 <div className="sm:col-span-2">
                   <Label>Photo Upload</Label>
+                  <p className="text-xs text-slate-500 mb-2">
+                    {CHILD_PROFILE_PHOTO_ACCEPT_LABEL}. Max 5 MB. We detect the face (when possible), crop to a square,
+                    and size it for your round profile picture.
+                  </p>
                   <div className="flex flex-col sm:flex-row sm:items-center gap-3">
-                    <label className="inline-flex items-center justify-center px-4 py-2 rounded-full bg-[#fff3ec] text-[#9b3e1f] font-semibold text-sm cursor-pointer hover:bg-[#fde6da] transition-colors">
-                      Upload Photo
+                    <label
+                      className={`inline-flex items-center justify-center px-4 py-2 rounded-full bg-[#fff3ec] text-[#9b3e1f] font-semibold text-sm cursor-pointer hover:bg-[#fde6da] transition-colors ${
+                        photoChildIdBusy === child.id ? 'opacity-50 pointer-events-none' : ''
+                      }`}
+                    >
+                      {photoChildIdBusy === child.id ? 'Preparing photo…' : 'Upload Photo'}
                       <input
                         type="file"
-                        accept="image/*"
+                        accept={CHILD_PROFILE_PHOTO_ACCEPT}
+                        disabled={photoChildIdBusy === child.id}
                         className="hidden"
-                        onChange={(e) => handlePhotoChange(child.id, e.target.files?.[0] ?? null)}
+                        onChange={(e) => {
+                          const f = e.target.files?.[0] ?? null
+                          e.target.value = ''
+                          void handlePhotoFileChosen(child.id, f)
+                        }}
                       />
                     </label>
                     <span className="text-xs text-slate-500">
-                      {child.childPhotoFile?.name || (child.childPhotoUrl ? 'Photo uploaded' : 'No file selected')}
+                      {child.childPhotoFile?.name || (child.childPhotoUrl ? 'Photo ready' : 'No file selected')}
                     </span>
-                    {child.childPhotoUrl && (
-                      <img
-                        src={child.childPhotoUrl}
-                        alt={`${formatChildName(child) || 'Player'} uploaded profile`}
-                        className="w-10 h-10 rounded-full object-cover border border-[#e8d8ce]"
-                      />
-                    )}
+                    <RegChildPhotoAvatar
+                      file={child.childPhotoFile}
+                      storedUrl={child.childPhotoUrl}
+                      name={formatChildName(child) || 'Player'}
+                    />
                   </div>
                 </div>
                 <div className="sm:col-span-2">

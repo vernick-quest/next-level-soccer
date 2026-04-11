@@ -5,8 +5,13 @@ import { useRouter } from 'next/navigation'
 import { uploadChildPhoto } from '@/lib/supabase/storage-upload'
 import { updateChildProfilePhoto } from '@/app/dashboard/actions'
 import ChildAvatar from './ChildAvatar'
-
-const MAX_BYTES = 5 * 1024 * 1024
+import {
+  CHILD_PROFILE_PHOTO_ACCEPT,
+  CHILD_PROFILE_PHOTO_ACCEPT_LABEL,
+  CHILD_PROFILE_PHOTO_MAX_BYTES,
+  isChildProfilePhotoMime,
+  processChildPhotoForUpload,
+} from '@/lib/child-photo-face-crop'
 
 export default function ChildPhotoUploader({
   registrationChildId,
@@ -39,18 +44,25 @@ export default function ChildPhotoUploader({
     e.target.value = ''
     if (!file) return
 
-    if (!file.type.startsWith('image/')) {
-      setError('Please choose an image file.')
+    if (!isChildProfilePhotoMime(file.type)) {
+      setError(`Please choose ${CHILD_PROFILE_PHOTO_ACCEPT_LABEL}.`)
       return
     }
-    if (file.size > MAX_BYTES) {
+    if (file.size > CHILD_PROFILE_PHOTO_MAX_BYTES) {
       setError('Image must be 5 MB or smaller.')
       return
     }
 
     setError(null)
     startTransition(async () => {
-      const { publicUrl, error: upErr } = await uploadChildPhoto(file, registrationChildId)
+      let uploadFile = file
+      try {
+        uploadFile = await processChildPhotoForUpload(file)
+      } catch (e) {
+        setError(e instanceof Error ? e.message : 'Could not process image.')
+        return
+      }
+      const { publicUrl, error: upErr } = await uploadChildPhoto(uploadFile, registrationChildId)
       if (upErr || !publicUrl) {
         setError(upErr ?? 'Upload failed.')
         return
@@ -75,7 +87,7 @@ export default function ChildPhotoUploader({
         <input
           ref={inputRef}
           type="file"
-          accept="image/jpeg,image/png,image/webp,image/gif"
+          accept={CHILD_PROFILE_PHOTO_ACCEPT}
           className="sr-only"
           onChange={onFileChange}
         />
@@ -88,6 +100,9 @@ export default function ChildPhotoUploader({
           {isPending ? 'Saving…' : photoUrl ? 'Change photo' : 'Add photo'}
         </button>
         {label ? <span className="text-xs text-slate-600 truncate max-w-[14rem]">{label}</span> : null}
+        <span className="text-xs text-slate-500">
+          {CHILD_PROFILE_PHOTO_ACCEPT_LABEL}. Max 5 MB. Face-centered square crop for the circle.
+        </span>
         {error ? <span className="text-xs text-red-600">{error}</span> : null}
       </div>
     </div>

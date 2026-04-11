@@ -58,6 +58,7 @@ export type CoachRegistrationRow = {
   coach_discount_cents: number
   player_first_name: string | null
   player_last_name: string | null
+  child_photo_url: string | null
   parent_first_name: string | null
   parent_last_name: string | null
   parent_email: string | null
@@ -163,6 +164,7 @@ export async function listCoachRegistrations(): Promise<{
       coach_discount_cents,
       player_first_name,
       player_last_name,
+      child_photo_url,
       parent_first_name,
       parent_last_name,
       parent_email,
@@ -191,6 +193,7 @@ export async function listCoachRegistrations(): Promise<{
     coach_discount_cents: Number((r as { coach_discount_cents?: number | null }).coach_discount_cents ?? 0) || 0,
     player_first_name: r.player_first_name,
     player_last_name: r.player_last_name,
+    child_photo_url: (r as { child_photo_url?: string | null }).child_photo_url ?? null,
     parent_first_name: r.parent_first_name,
     parent_last_name: r.parent_last_name,
     parent_email: r.parent_email,

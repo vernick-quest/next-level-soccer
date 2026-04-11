@@ -34,6 +34,7 @@ import {
   type CoachWeekPlayerRow,
 } from './actions'
 import { resetEmailTemplateOverride, saveEmailTemplateOverride } from './email-template-actions'
+import ChildAvatar from '@/components/ChildAvatar'
 
 function emptyScores(): Record<CoachReportMetricKey, '' | number> {
   return Object.fromEntries(COACH_REPORT_METRIC_KEYS.map((k) => [k, '' as const])) as Record<
@@ -712,7 +713,14 @@ export default function CoachPortal({
                         className="bg-white border border-[#e8d8ce] rounded-2xl p-4 sm:p-5 shadow-sm"
                       >
                         <div className="flex flex-wrap items-start justify-between gap-3">
-                          <div className="min-w-0">
+                          <div className="min-w-0 flex gap-3">
+                            <ChildAvatar
+                              photoUrl={row.child_photo_url}
+                              alt={`${row.player_first_name ?? ''} ${row.player_last_name ?? ''}`.trim() || 'Player'}
+                              sizeClass="w-14 h-14 sm:w-16 sm:h-16"
+                              className="ring-2 ring-white shadow-sm"
+                            />
+                            <div className="min-w-0">
                             <div className="font-bold text-[#062744]">
                               {row.player_first_name} {row.player_last_name}
                             </div>
@@ -758,6 +766,7 @@ export default function CoachPortal({
                                 due for this week).
                               </p>
                             ) : null}
+                            </div>
                           </div>
                           <div className="flex flex-col items-end gap-2 w-full sm:w-auto">
                             <span
@@ -1003,7 +1012,14 @@ export default function CoachPortal({
                         onClick={() => setExpandedChild(open ? null : p.registrationChildId)}
                         className="w-full flex items-center justify-between gap-3 px-4 py-4 text-left hover:bg-[#fffaf5]"
                       >
-                        <div>
+                        <div className="flex items-center gap-3 min-w-0">
+                          <ChildAvatar
+                            photoUrl={p.child_photo_url}
+                            alt={`${p.player_first_name} ${p.player_last_name}`}
+                            sizeClass="w-12 h-12 shrink-0"
+                            className="ring-2 ring-white shadow-sm"
+                          />
+                          <div className="min-w-0">
                           <div className="font-bold text-[#062744]">
                             {p.player_first_name} {p.player_last_name}
                           </div>
@@ -1017,6 +1033,7 @@ export default function CoachPortal({
                             ) : (
                               <span className="ml-2 text-amber-700 font-semibold">· No report yet</span>
                             )}
+                          </div>
                           </div>
                         </div>
                         <span className="text-[#062744] font-bold text-sm shrink-0">{open ? '▲' : '▼'}</span>

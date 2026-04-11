@@ -13,6 +13,7 @@ import {
 } from '@/lib/player-report-metrics'
 import { REPORT_CARD_CATEGORY_ACCENT } from '@/lib/report-card-ui'
 import { savePlayerReport, type CoachPlayerRow } from './actions'
+import ChildAvatar from '@/components/ChildAvatar'
 
 function emptyScores(): Record<CoachReportMetricKey, '' | number> {
   return Object.fromEntries(COACH_REPORT_METRIC_KEYS.map((k) => [k, '' as const])) as Record<
@@ -175,17 +176,11 @@ export default function CoachReportForm({
 
               {selectedPlayer && (
                 <div className="flex items-center gap-3">
-                  {selectedPlayer.child_photo_url ? (
-                    <img
-                      src={selectedPlayer.child_photo_url}
-                      alt={`${selectedPlayer.player_first_name} ${selectedPlayer.player_last_name}`}
-                      className="w-12 h-12 rounded-full object-cover border border-[#e8d8ce]"
-                    />
-                  ) : (
-                    <div className="w-12 h-12 rounded-full bg-slate-100 border border-[#e8d8ce] flex items-center justify-center text-xs text-slate-500">
-                      No photo
-                    </div>
-                  )}
+                  <ChildAvatar
+                    photoUrl={selectedPlayer.child_photo_url}
+                    alt={`${selectedPlayer.player_first_name} ${selectedPlayer.player_last_name}`}
+                    sizeClass="w-12 h-12"
+                  />
                   <p className="text-xs text-slate-500">
                     Grade (fall): {selectedPlayer.grade_fall}
                     {selectedPlayer.soccer_club?.trim() ? ` · Club: ${selectedPlayer.soccer_club.trim()}` : ''}
