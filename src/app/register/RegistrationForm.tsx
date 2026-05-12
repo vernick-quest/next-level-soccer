@@ -1,5 +1,6 @@
 'use client'
 
+import Link from 'next/link'
 import { useState, useTransition, useEffect, useCallback } from 'react'
 import type { User } from '@supabase/supabase-js'
 import { createClient } from '@/lib/supabase/client'
@@ -1071,6 +1072,12 @@ export default function RegistrationForm({ additionalChildMode = false }: { addi
           ⚠ {error}
         </div>
       )}
+
+      <p className="text-center text-xs text-slate-500 pt-4">
+        <Link href="/privacy" className="text-[#062744] hover:text-[#f05a28] underline underline-offset-2 font-medium">
+          Privacy Policy
+        </Link>
+      </p>
     </div>
   )
 }

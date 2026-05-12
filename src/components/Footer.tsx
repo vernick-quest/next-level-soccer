@@ -43,6 +43,11 @@ export default function Footer() {
                   Report Card
                 </Link>
               </li>
+              <li>
+                <Link href="/privacy" className="hover:text-[#f8c5b1] transition-colors">
+                  Privacy Policy
+                </Link>
+              </li>
             </ul>
           </div>
 
@@ -72,8 +77,14 @@ export default function Footer() {
           </div>
         </div>
 
-        <div className="border-t border-[#1f4363] mt-10 pt-6 text-center text-xs">
+        <div className="border-t border-[#1f4363] mt-10 pt-6 text-center text-xs text-[#9eb4cc]">
           © {new Date().getFullYear()} Next Level Soccer SF. All rights reserved.
+          <span className="mx-2 text-[#1f4363]" aria-hidden>
+            ·
+          </span>
+          <Link href="/privacy" className="text-[#f8c5b1] hover:text-white transition-colors">
+            Privacy Policy
+          </Link>
         </div>
       </div>
     </footer>
