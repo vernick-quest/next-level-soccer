@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState, useTransition } from 'react'
 import Link from 'next/link'
+import { usePathname } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { CAMP_SESSIONS, campWeekSortIndex } from '@/lib/camp-weeks'
 import { campNameFromWeekLabel } from '@/lib/camp-display'
@@ -96,6 +97,9 @@ export default function CoachPortal({
   const [emailFieldsDraft, setEmailFieldsDraft] = useState<Record<string, string>>(
     () => ({ ...initialEmailTemplateBundle[EMAIL_TEMPLATE_KEY_ORDER[0]].fields }),
   )
+
+  const pathname = usePathname()
+  const playersDirectoryActive = pathname.startsWith('/coach/players')
 
   useEffect(() => {
     setEmailFieldsDraft({ ...emailBundle[emailTemplateKey].fields })
@@ -474,6 +478,14 @@ export default function CoachPortal({
               <span className="ml-1.5 text-xs opacity-90">({registrationsNeedingAttention} need action)</span>
             ) : null}
           </button>
+          <Link
+            href="/coach/players"
+            className={`flex-1 sm:flex-none px-4 py-2.5 rounded-xl text-sm font-bold transition-colors text-center inline-flex items-center justify-center ${
+              playersDirectoryActive ? 'bg-[#062744] text-white' : 'text-[#213c57] hover:bg-[#f7f2e8]'
+            }`}
+          >
+            Players
+          </Link>
           <button
             type="button"
             onClick={() => setTab('reports')}
