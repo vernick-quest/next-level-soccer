@@ -13,10 +13,8 @@ import { REGISTRATION_RECEIPT_EMAIL } from '@/lib/resend-sender'
 import { buildRegistrationReceivedEmailHtml } from '@/lib/transactional-parent-email-html'
 import { lookupAuthUserIdByEmail } from '@/lib/supabase/auth-admin-client'
 import { createServiceRoleClient } from '@/lib/supabase/service'
-import {
-  buildRegistrationsRows,
-  type FamilyRegistrationInput,
-} from '@/app/register/actions'
+import { buildRegistrationsRows } from '@/lib/family-registration-rows'
+import type { FamilyRegistrationInput } from '@/lib/family-registration-input-types'
 
 const KNOWN_WEEKS = new Set<string>(CAMP_SESSIONS)
 

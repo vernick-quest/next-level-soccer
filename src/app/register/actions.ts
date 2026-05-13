@@ -10,6 +10,11 @@ import { REPLY_TO_EMAIL, REGISTRATION_RECEIPT_EMAIL, SENDER_EMAIL } from '@/lib/
 import { buildRegistrationReceivedEmailHtml } from '@/lib/transactional-parent-email-html'
 import { buildRegistrationOpsReceiptHtml } from '@/lib/registration-ops-receipt-html'
 import { createClient, createServiceRoleClient } from '@/lib/supabase/server'
+import { buildRegistrationsRows } from '@/lib/family-registration-rows'
+
+import type { ActionResult, FamilyRegistrationInput } from '@/lib/family-registration-input-types'
+
+export type { RegistrationChildInput, FamilyRegistrationInput, ActionResult } from '@/lib/family-registration-input-types'
 
 function throwSupabaseError(context: string, error: unknown): never {
   console.log(`[submitFamilyRegistration] ${context} — full Supabase error:`, error)
@@ -18,98 +23,6 @@ function throwSupabaseError(context: string, error: unknown): never {
       ? JSON.stringify(error)
       : JSON.stringify({ message: String(error) })
   throw new Error(`${context}: ${payload}`)
-}
-
-export type RegistrationChildInput = {
-  playerFirstName: string
-  playerLastName: string
-  playerPronouns: string
-  playerDob: string
-  playerGender: 'boy' | 'girl'
-  playerExperienceLevel: string
-  playerExperienceOther: string
-  /** Club / program they play for this year (free text; suggestions on the form). */
-  playerSoccerClub: string
-  primaryPosition: string
-  secondaryPosition: string
-  gradeFall: string
-  schoolFall: string
-  childPhotoUrl: string
-  campWeeks: string[]
-  shirtSize: string
-  medicalNotes: string
-  emergencyContactName: string
-  emergencyContactPhone: string
-}
-
-export type FamilyRegistrationInput = {
-  parentFirstName: string
-  parentLastName: string
-  parentEmail: string
-  parentPhone: string
-  children: RegistrationChildInput[]
-  /** Honeypot — must be empty (see registration form). */
-  hpCompany?: string
-}
-
-export type ActionResult =
-  | { success: true }
-  | { success: false; error: string }
-
-
-/** Postgres `date` — HTML date input is usually YYYY-MM-DD; normalize edge cases. */
-export function sanitizePlayerDobForDb(dob: string): string {
-  const t = dob.trim()
-  if (/^\d{4}-\d{2}-\d{2}$/.test(t)) return t
-  const d = new Date(t)
-  if (!Number.isNaN(d.getTime())) return d.toISOString().slice(0, 10)
-  return t
-}
-
-export function playerExperienceForRegistrations(child: RegistrationChildInput): string {
-  if (child.playerExperienceLevel === 'other') {
-    return child.playerExperienceOther.trim() || 'Other'
-  }
-  return child.playerExperienceLevel
-}
-
-/** One `registrations` row per camp week (dashboard + spot counter use this table). */
-export function buildRegistrationsRows(
-  data: FamilyRegistrationInput,
-  userId: string,
-  submissionId: string,
-): Record<string, unknown>[] {
-  const rows: Record<string, unknown>[] = []
-  for (const child of data.children) {
-    for (const week of child.campWeeks) {
-      rows.push({
-        registration_submission_id: submissionId,
-        user_id: userId,
-        parent_first_name: data.parentFirstName,
-        parent_last_name: data.parentLastName,
-        parent_email: data.parentEmail,
-        parent_phone: data.parentPhone,
-        player_first_name: child.playerFirstName,
-        player_last_name: child.playerLastName,
-        player_dob: sanitizePlayerDobForDb(child.playerDob),
-        player_age_group: child.gradeFall,
-        player_experience: playerExperienceForRegistrations(child),
-        camp_session: week,
-        shirt_size: child.shirtSize,
-        child_photo_url: child.childPhotoUrl.trim() || null,
-        medical_notes: child.medicalNotes.trim() || null,
-        emergency_contact_name: child.emergencyContactName,
-        emergency_contact_phone: child.emergencyContactPhone,
-        status: 'pending',
-        refund_requested_weeks: [],
-        primary_position: child.primaryPosition.trim(),
-        secondary_position: (child.secondaryPosition ?? '').trim(),
-        playing_level: child.playerExperienceLevel === 'other' ? null : child.playerExperienceLevel,
-        soccer_club: child.playerSoccerClub.trim(),
-      })
-    }
-  }
-  return rows
 }
 
 async function insertRegistrationsRows(rows: Record<string, unknown>[]): Promise<void> {

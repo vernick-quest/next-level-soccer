@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation'
 import { CAMP_SESSIONS } from '@/lib/camp-weeks'
 import { SOCCER_POSITION_CHOICES } from '@/lib/soccer-positions'
 import { staffManualFamilyRegistration } from './coach-registration-actions'
-import type { FamilyRegistrationInput, RegistrationChildInput } from '@/app/register/actions'
+import type { FamilyRegistrationInput, RegistrationChildInput } from '@/lib/family-registration-input-types'
 
 const EXPERIENCE_LEVELS = [
   'SFYS',
