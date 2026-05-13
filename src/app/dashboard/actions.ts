@@ -4,7 +4,12 @@ import { Resend } from 'resend'
 import { buildEmailSubject } from '@/lib/email-template-interpolate'
 import { resolveEmailTemplateFields } from '@/lib/email-templates-resolve'
 import { insertDenormalizedRegistrationRows } from '@/lib/denormalized-registrations-insert'
-import { REPLY_TO_EMAIL, REGISTRATION_RECEIPT_EMAIL, SENDER_EMAIL } from '@/lib/resend-sender'
+import {
+  getResendApiKeyOrNull,
+  REPLY_TO_EMAIL,
+  REGISTRATION_RECEIPT_EMAIL,
+  SENDER_EMAIL,
+} from '@/lib/resend-sender'
 import { buildAdditionalWeeksEmailHtml } from '@/lib/transactional-parent-email-html'
 import { buildRegistrationOpsReceiptHtml } from '@/lib/registration-ops-receipt-html'
 import { CAMP_WEEK_PRICE_CENTS as CAMP_PRICE_CENTS } from '@/lib/camp-pricing'
@@ -1128,7 +1133,7 @@ export async function submitAdditionalWeeks(input: {
 
   const newAmountCents = addedWeekCount * CAMP_PRICE_CENTS
 
-  const apiKey = process.env.RESEND_API_KEY
+  const apiKey = getResendApiKeyOrNull('submitAdditionalWeeks')
   if (apiKey) {
     const resend = new Resend(apiKey)
     const sub0 = resolved[0]?.sub
@@ -1192,8 +1197,6 @@ export async function submitAdditionalWeeks(input: {
     } else {
       console.warn('submitAdditionalWeeks: parent email missing; parent confirmation skipped (ops receipt still attempted).')
     }
-  } else {
-    console.warn('submitAdditionalWeeks: RESEND_API_KEY missing; skip confirmation and ops receipt.')
   }
 
   return { success: true }
@@ -1273,7 +1276,7 @@ export async function requestRefundForCamp(input: {
     return { success: false, error: 'Could not save refund request. Please try again.' }
   }
 
-  const apiKey = process.env.RESEND_API_KEY
+  const apiKey = getResendApiKeyOrNull('requestRefundForCamp')
   const notifyTo =
     process.env.RESEND_REFUND_TO ??
     process.env.OWNER_EMAIL ??
@@ -1303,9 +1306,11 @@ export async function requestRefundForCamp(input: {
       console.error('requestRefundForCamp email:', sendErr)
     }
   } else {
-    console.warn(
-      'requestRefundForCamp: missing RESEND_API_KEY or RESEND_REFUND_TO/OWNER_EMAIL; refund saved but email not sent.',
-    )
+    if (!notifyTo) {
+      console.warn(
+        'requestRefundForCamp: missing RESEND_REFUND_TO/OWNER_EMAIL; refund saved but staff not emailed.',
+      )
+    }
   }
 
   return { success: true }

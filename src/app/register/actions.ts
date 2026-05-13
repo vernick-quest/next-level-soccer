@@ -6,7 +6,12 @@ import { insertDenormalizedRegistrationRows } from '@/lib/denormalized-registrat
 import { validateCampWeekCapacityForSubmission } from '@/lib/home-camp-spots'
 import { buildEmailSubject } from '@/lib/email-template-interpolate'
 import { resolveEmailTemplateFields } from '@/lib/email-templates-resolve'
-import { REPLY_TO_EMAIL, REGISTRATION_RECEIPT_EMAIL, SENDER_EMAIL } from '@/lib/resend-sender'
+import {
+  getResendApiKeyOrNull,
+  REPLY_TO_EMAIL,
+  REGISTRATION_RECEIPT_EMAIL,
+  SENDER_EMAIL,
+} from '@/lib/resend-sender'
 import { buildRegistrationReceivedEmailHtml } from '@/lib/transactional-parent-email-html'
 import { buildRegistrationOpsReceiptHtml } from '@/lib/registration-ops-receipt-html'
 import { createClient, createServiceRoleClient } from '@/lib/supabase/server'
@@ -177,9 +182,7 @@ export async function submitFamilyRegistration(data: FamilyRegistrationInput): P
     throw registrationsErr instanceof Error ? registrationsErr : new Error(JSON.stringify(registrationsErr))
   }
 
-  const apiKey =
-    typeof process.env.RESEND_API_KEY === 'string' ? process.env.RESEND_API_KEY.trim() : ''
-  /** Only gate that skips email: missing/blank `RESEND_API_KEY` on this server (e.g. prod without env, or dev server not restarted after editing `.env.local`). */
+  const apiKey = getResendApiKeyOrNull('submitFamilyRegistration')
   if (apiKey) {
     const parentName = `${data.parentFirstName} ${data.parentLastName}`.trim()
     const newWeekCount = data.children.reduce((n, c) => n + c.campWeeks.length, 0)
@@ -233,10 +236,6 @@ export async function submitFamilyRegistration(data: FamilyRegistrationInput): P
     if (sendErr) {
       console.error('[submitFamilyRegistration] Resend send error:', sendErr)
     }
-  } else {
-    console.warn(
-      '[submitFamilyRegistration] RESEND_API_KEY is missing or blank after trim; parent confirmation and ops receipt skipped.',
-    )
   }
 
   return { success: true }

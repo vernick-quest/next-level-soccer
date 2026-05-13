@@ -21,7 +21,7 @@ import {
 } from '@/lib/player-report-metrics'
 import { buildEmailSubject } from '@/lib/email-template-interpolate'
 import { resolveEmailTemplateFields } from '@/lib/email-templates-resolve'
-import { REPLY_TO_EMAIL, SENDER_EMAIL } from '@/lib/resend-sender'
+import { getResendApiKeyOrNull, REPLY_TO_EMAIL, SENDER_EMAIL } from '@/lib/resend-sender'
 import { createClient } from '@/lib/supabase/server'
 import { createServiceRoleClient } from '@/lib/supabase/service'
 import { signChildProfilePhotoUrlsUnique } from '@/lib/supabase/child-profile-signed-url'
@@ -427,7 +427,7 @@ export async function setRegistrationDecision(input: {
     }
   }
 
-  const apiKey = process.env.RESEND_API_KEY
+  const apiKey = getResendApiKeyOrNull('setRegistrationDecision')
   const parentEmail = (row.parent_email ?? '').trim()
   const parentFirst = (row.parent_first_name ?? '').trim() || 'there'
   const playerName = `${row.player_first_name ?? ''} ${row.player_last_name ?? ''}`.trim()
@@ -477,7 +477,9 @@ export async function setRegistrationDecision(input: {
       if (sendErr) console.error('setRegistrationDecision decline email:', sendErr)
     }
   } else {
-    console.warn('setRegistrationDecision: missing RESEND_API_KEY or parent email; skip notification.')
+    if (!parentEmail) {
+      console.warn('setRegistrationDecision: missing parent email; skip notification.')
+    }
   }
 
   return { success: true }
@@ -558,7 +560,7 @@ export async function resolveRefundRequest(input: {
     return { success: false, error: 'Could not update registration.' }
   }
 
-  const apiKey = process.env.RESEND_API_KEY
+  const apiKey = getResendApiKeyOrNull('resolveRefundRequest')
   const parentEmail = (row.parent_email ?? '').trim()
   const parentFirst = (row.parent_first_name ?? '').trim() || 'there'
   const playerName = `${row.player_first_name ?? ''} ${row.player_last_name ?? ''}`.trim()
@@ -606,7 +608,9 @@ export async function resolveRefundRequest(input: {
       if (sendErr) console.error('resolveRefundRequest decline email:', sendErr)
     }
   } else {
-    console.warn('resolveRefundRequest: missing RESEND_API_KEY or parent email; skip notification.')
+    if (!parentEmail) {
+      console.warn('resolveRefundRequest: missing parent email; skip notification.')
+    }
   }
 
   return { success: true }
@@ -719,7 +723,7 @@ export async function markRefundMoneySent(input: { registrationId: string }): Pr
     return { success: false, error: 'Could not update registration.' }
   }
 
-  const apiKey = process.env.RESEND_API_KEY
+  const apiKey = getResendApiKeyOrNull('markRefundMoneySent')
   const parentEmail = (row.parent_email ?? '').trim()
   const parentFirst = (row.parent_first_name ?? '').trim() || 'there'
   const playerName = `${row.player_first_name ?? ''} ${row.player_last_name ?? ''}`.trim()
@@ -745,7 +749,9 @@ export async function markRefundMoneySent(input: { registrationId: string }): Pr
     })
     if (sendErr) console.error('markRefundMoneySent email:', sendErr)
   } else {
-    console.warn('markRefundMoneySent: missing RESEND_API_KEY or parent email; skip notification.')
+    if (!parentEmail) {
+      console.warn('markRefundMoneySent: missing parent email; skip notification.')
+    }
   }
 
   return { success: true }
@@ -796,7 +802,7 @@ export async function cancelCampWeekLowEnrollment(input: {
     return { success: false, error: 'No pending or confirmed registrations left to cancel for that week.' }
   }
 
-  const apiKey = process.env.RESEND_API_KEY
+  const apiKey = getResendApiKeyOrNull('cancelCampWeekLowEnrollment')
   const resend = apiKey ? new Resend(apiKey) : null
   const now = new Date().toISOString()
   const organizerCopy = await resolveEmailTemplateFields('organizer_camp_cancelled')
@@ -853,10 +859,6 @@ export async function cancelCampWeekLowEnrollment(input: {
     } else if (!parentEmail) {
       console.warn('cancelCampWeekLowEnrollment: missing parent email for row', r.id)
     }
-  }
-
-  if (!apiKey) {
-    console.warn('cancelCampWeekLowEnrollment: RESEND_API_KEY missing; parents not emailed.')
   }
 
   return { success: true, affected: toProcess.length }
@@ -978,7 +980,7 @@ export async function savePlayerReport(payload: {
     return { success: false, error: 'Could not save report. Try again.' }
   }
 
-  const apiKey = process.env.RESEND_API_KEY
+  const apiKey = getResendApiKeyOrNull('savePlayerReport')
   const parentEmail = (regRow.parent_email ?? '').trim()
   const parentFirst = (regRow.parent_first_name ?? '').trim() || 'there'
   const childName = `${regChild.player_first_name ?? ''} ${regChild.player_last_name ?? ''}`.trim()
@@ -1011,7 +1013,9 @@ export async function savePlayerReport(payload: {
       sentAt = new Date().toISOString()
     }
   } else {
-    console.warn('savePlayerReport: missing RESEND_API_KEY or parent email.')
+    if (!parentEmail) {
+      console.warn('savePlayerReport: missing parent email.')
+    }
   }
 
   if (sentAt) {

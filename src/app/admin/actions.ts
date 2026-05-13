@@ -4,10 +4,9 @@ import { Resend } from 'resend'
 import { getStaffAdminUser } from '@/lib/admin'
 import { buildEmailSubject } from '@/lib/email-template-interpolate'
 import { resolveEmailTemplateFields } from '@/lib/email-templates-resolve'
-import { REPLY_TO_EMAIL, SENDER_EMAIL } from '@/lib/resend-sender'
+import { getResendApiKeyOrNull, REPLY_TO_EMAIL, SENDER_EMAIL } from '@/lib/resend-sender'
 import { buildWelcomeToCampEmailHtml } from '@/lib/transactional-parent-email-html'
 import { campWeekSortIndex } from '@/lib/camp-weeks'
-import { createClient } from '@/lib/supabase/server'
 import { createServiceRoleClient } from '@/lib/supabase/service'
 
 export type AdminRow = {
@@ -38,8 +37,15 @@ export async function listAdminRows(): Promise<
     return { rows: [], error: 'auth' }
   }
 
-  const supabase = await createClient()
-  const { data, error } = await supabase
+  let service: ReturnType<typeof createServiceRoleClient>
+  try {
+    service = createServiceRoleClient()
+  } catch (e) {
+    console.error('listAdminRows: missing SUPABASE_SERVICE_ROLE_KEY', e)
+    return { rows: [], error: 'fetch' }
+  }
+
+  const { data, error } = await service
     .from('registration_submissions')
     .select(
       `
@@ -158,13 +164,17 @@ export async function sendWelcomeEmail(submissionId: string): Promise<ActionOk> 
     return { success: false, error: 'Missing submission.' }
   }
 
-  const apiKey = process.env.RESEND_API_KEY
-  if (!apiKey) {
-    return { success: false, error: 'RESEND_API_KEY is not set on the server.' }
+  let service: ReturnType<typeof createServiceRoleClient>
+  try {
+    service = createServiceRoleClient()
+  } catch {
+    return {
+      success: false,
+      error: 'Server is missing SUPABASE_SERVICE_ROLE_KEY. Add it to load registrations.',
+    }
   }
 
-  const supabase = await createClient()
-  const { data: sub, error: fetchErr } = await supabase
+  const { data: sub, error: fetchErr } = await service
     .from('registration_submissions')
     .select(
       `
@@ -189,6 +199,11 @@ export async function sendWelcomeEmail(submissionId: string): Promise<ActionOk> 
 
   if (sub.status !== 'confirmed') {
     return { success: false, error: 'Confirm payment (Mark as Paid) before sending the welcome email.' }
+  }
+
+  const apiKey = getResendApiKeyOrNull('sendWelcomeEmail')
+  if (!apiKey) {
+    return { success: false, error: 'RESEND_API_KEY is not set on the server.' }
   }
 
   const children = sub.registration_children ?? []
