@@ -53,14 +53,17 @@ async function syncChildCampWeeksFromRegistrations(
 ) {
   const fn = playerFirst.trim()
   const ln = playerLast.trim()
-  const { data: rows, error } = await db
+  const { data: allRows, error } = await db
     .from('registrations')
-    .select('camp_session')
+    .select('camp_session, player_first_name, player_last_name')
     .eq('registration_submission_id', submissionId)
-    .eq('player_first_name', fn)
-    .eq('player_last_name', ln)
   if (error) throwDb('syncChildCampWeeksFromRegistrations select', error)
-  const weeks = [...new Set((rows ?? []).map((r) => (r.camp_session as string | null)?.trim()).filter(Boolean) as string[])].sort(
+  const rows = (allRows ?? []).filter(
+    (r) =>
+      ((r.player_first_name as string | null) ?? '').trim() === fn &&
+      ((r.player_last_name as string | null) ?? '').trim() === ln,
+  )
+  const weeks = [...new Set(rows.map((r) => (r.camp_session as string | null)?.trim()).filter(Boolean) as string[])].sort(
     (a, b) => campWeekSortIndex(a) - campWeekSortIndex(b),
   )
   const { error: upErr } = await db.from('registration_children').update({ camp_weeks: weeks }).eq('id', childId)
@@ -474,12 +477,14 @@ export async function staffAdjustChildCampWeeks(
     async function loadRegsForPlayer() {
       const { data, error } = await db
         .from('registrations')
-        .select('id, camp_session, status')
+        .select('id, camp_session, status, player_first_name, player_last_name')
         .eq('registration_submission_id', submissionId)
-        .eq('player_first_name', fn)
-        .eq('player_last_name', ln)
       if (error) throwDb('loadRegsForPlayer', error)
-      return data ?? []
+      return (data ?? []).filter(
+        (r) =>
+          ((r.player_first_name as string | null) ?? '').trim() === fn &&
+          ((r.player_last_name as string | null) ?? '').trim() === ln,
+      )
     }
 
     let existingRegs = await loadRegsForPlayer()
@@ -539,21 +544,26 @@ export async function staffAdjustChildCampWeeks(
     existingRegs.map((r) => ((r.camp_session as string | null) ?? '').trim()).filter(Boolean),
   )
 
+  const { data: allForTemplate, error: templateListErr } = await db
+    .from('registrations')
+    .select('*')
+    .eq('registration_submission_id', submissionId)
+  if (templateListErr) {
+    console.error('[staffAdjustChildCampWeeks] template list', templateListErr)
+    return { success: false, error: 'Could not load registrations for this family.' }
+  }
+  const templateRow = (allForTemplate ?? []).find(
+    (r) =>
+      ((r.player_first_name as string | null) ?? '').trim() === fn &&
+      ((r.player_last_name as string | null) ?? '').trim() === ln,
+  )
+
   const insertRows: Record<string, unknown>[] = []
   const weeksActuallyAdded: string[] = []
   for (const week of addWeeks) {
     if (existingSessions.has(week)) continue
-    const { data: template } = await db
-      .from('registrations')
-      .select('*')
-      .eq('registration_submission_id', submissionId)
-      .eq('player_first_name', fn)
-      .eq('player_last_name', ln)
-      .limit(1)
-      .maybeSingle()
-
-    const row = template
-      ? registrationInsertRowFromTemplate(template as Record<string, unknown>, week)
+    const row = templateRow
+      ? registrationInsertRowFromTemplate(templateRow as Record<string, unknown>, week)
       : registrationInsertRowFromChild(rc, subRow, userId, week)
     insertRows.push(row)
     weeksActuallyAdded.push(week)
