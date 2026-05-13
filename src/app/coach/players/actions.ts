@@ -53,6 +53,7 @@ export type CoachDirectoryPlayerProfile = {
   primary_position_label: string
   secondary_position_label: string
   soccer_club: string | null
+  playing_level: string | null
   grade_fall: string | null
   school_fall: string | null
   camp_weeks_requested: string[]
@@ -178,6 +179,8 @@ export async function getPlayerDirectoryProfileForStaff(
       grade_fall,
       school_fall,
       camp_weeks,
+      player_experience_level,
+      player_experience_other,
       registration_submissions (
         parent_first_name,
         parent_last_name,
@@ -204,7 +207,9 @@ export async function getPlayerDirectoryProfileForStaff(
 
   const { data: regsRaw, error: regErr } = await service
     .from('registrations')
-    .select('id, camp_session, status, created_at, camp_completed_at, organizer_cancelled_at, player_first_name, player_last_name')
+    .select(
+      'id, camp_session, status, created_at, camp_completed_at, organizer_cancelled_at, player_first_name, player_last_name, playing_level',
+    )
     .eq('registration_submission_id', submissionId)
     .order('created_at', { ascending: false })
 
@@ -293,6 +298,22 @@ export async function getPlayerDirectoryProfileForStaff(
 
   const campWeeks = (child.camp_weeks as string[] | null) ?? []
 
+  const expLevel = trimName(child.player_experience_level as string | null)
+  const expOther = trimName(child.player_experience_other as string | null)
+  let playingLevel: string | null = null
+  if (expLevel) {
+    playingLevel = expLevel === 'other' ? expOther || 'Other' : expLevel
+  }
+  if (!playingLevel) {
+    for (const r of regs) {
+      const pl = trimName(r.playing_level as string | null)
+      if (pl) {
+        playingLevel = pl
+        break
+      }
+    }
+  }
+
   const profile: CoachDirectoryPlayerProfile = {
     id: child.id as string,
     player_first_name: fn || '—',
@@ -302,6 +323,7 @@ export async function getPlayerDirectoryProfileForStaff(
     primary_position_label: soccerPositionLabel(child.primary_position as string | null),
     secondary_position_label: soccerPositionLabel(child.secondary_position as string | null),
     soccer_club: trimName(child.soccer_club as string | null) || null,
+    playing_level: playingLevel,
     grade_fall: trimName(child.grade_fall as string | null) || null,
     school_fall: trimName(child.school_fall as string | null) || null,
     camp_weeks_requested: Array.isArray(campWeeks) ? campWeeks : [],

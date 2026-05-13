@@ -110,6 +110,21 @@ export default async function CoachPlayerProfilePage({ params }: { params: Promi
                     <dt className="text-xs font-bold uppercase text-slate-500">Current club</dt>
                     <dd className="text-[#062744] font-semibold">{profile.soccer_club || '—'}</dd>
                   </div>
+                  <div className="sm:col-span-2">
+                    <dt className="sr-only">Playing level</dt>
+                    <dd className="text-sm text-[#062744]">
+                      {profile.playing_level?.trim() ? (
+                        <span className="inline-flex flex-wrap items-baseline gap-x-1.5 rounded-lg border border-[#f0e2d9] bg-[#fffaf5] px-3 py-2">
+                          <span className="font-semibold">Playing Level:</span>
+                          <span>{profile.playing_level.trim()}</span>
+                        </span>
+                      ) : (
+                        <span>
+                          <span className="font-semibold">Playing Level:</span> <span className="text-slate-500">—</span>
+                        </span>
+                      )}
+                    </dd>
+                  </div>
                   <div>
                     <dt className="text-xs font-bold uppercase text-slate-500">Grade (fall)</dt>
                     <dd className="text-[#062744] font-semibold">{profile.grade_fall || '—'}</dd>
