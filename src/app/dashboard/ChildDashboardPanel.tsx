@@ -225,6 +225,7 @@ export default function ChildDashboardPanel({
 }) {
   const name = `${child.firstName} ${child.lastName}`.trim()
   const showIncremental = !!incrementalChild && !!child.registrationChildId
+  const hasAdditionalWeeksSelected = extraWeekSelection.size > 0
   const enrolledCampWeekKeys = useMemo(
     () => new Set(child.weeks.filter((w) => w.registrationId).map((w) => w.week)),
     [child.weeks],
@@ -390,7 +391,11 @@ export default function ChildDashboardPanel({
             type="button"
             disabled={isPending}
             onClick={() => onSaveAdditionalWeeks()}
-            className="mt-5 w-full sm:w-auto bg-[#062744] hover:bg-[#041f36] disabled:opacity-50 text-white font-bold py-3 px-8 rounded-full text-sm transition-colors"
+            className={`mt-5 w-full sm:w-auto text-white font-bold py-3 px-8 rounded-full text-sm transition-colors duration-300 ease-out disabled:opacity-50 ${
+              hasAdditionalWeeksSelected
+                ? 'bg-[#f05a28] hover:bg-[#d94e21]'
+                : 'bg-[#062744] hover:bg-[#041f36]'
+            }`}
           >
             {isPending ? 'Saving…' : 'Save additional weeks'}
           </button>

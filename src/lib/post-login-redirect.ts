@@ -12,6 +12,10 @@ export function normalizeInternalNext(raw: string | null | undefined): string {
   return p
 }
 
+/**
+ * Count `registration_children` rows tied to this user via `registration_submissions.auth_user_id` (= auth.uid()).
+ * Used for post-login parent routing (Scenario A vs B).
+ */
 export async function countRegistrationChildrenForUser(
   supabase: SupabaseClient,
   authUserId: string,
@@ -46,9 +50,16 @@ async function isStaffOrCoachPortalUser(supabase: SupabaseClient, user: User): P
 }
 
 /**
- * Where to send the user after a successful session is established (password, OAuth code exchange, magic link).
- * Staff: `/coaches`, except explicit `/admin…` targets stay on admin.
- * Parents: explicit `/register…` preserved; zero `registration_children` → `/register`; else `/dashboard` (or safe `next`).
+ * Where to send the user after a successful session (Google SSO, magic link, or email/password — all use this via
+ * `/auth/callback` or `getPostLoginRedirectPath` after password sign-in).
+ *
+ * **Staff:** `/coaches`, unless `next` is under `/admin` (admin Google sign-in).
+ *
+ * **Parents (non-staff):**
+ * - **Scenario A — Returning parent:** ≥1 `registration_children` for their submissions → `/dashboard`.
+ * - **Scenario B — New parent:** zero children → `/register` (onboarding / child registration).
+ * - If `next` already starts with `/register` (e.g. `?additionalChild=1`), that path is kept.
+ * - Otherwise a safe non-default `next` is honored; default landing is `/dashboard` when they have children.
  */
 export async function resolvePostLoginRedirect(
   supabase: SupabaseClient,
