@@ -6,7 +6,8 @@ import { resolvePostLoginRedirect } from '@/lib/post-login-redirect'
 export async function GET(request: Request) {
   const { searchParams, origin } = new URL(request.url)
   const code = searchParams.get('code')
-  const next = searchParams.get('next') ?? '/dashboard'
+  /** Omit default here so `resolvePostLoginRedirect` can choose staff vs parent vs onboarding. */
+  const next = searchParams.get('next')
 
   if (code) {
     const cookieStore = await cookies()
@@ -36,7 +37,12 @@ export async function GET(request: Request) {
       if (!user) {
         return NextResponse.redirect(`${origin}/login?error=auth`)
       }
-      const destination = await resolvePostLoginRedirect(supabase, user, next)
+      let destination: string
+      try {
+        destination = await resolvePostLoginRedirect(supabase, user, next)
+      } catch {
+        destination = '/dashboard'
+      }
       return NextResponse.redirect(`${origin}${destination.startsWith('/') ? destination : `/${destination}`}`)
     }
   }
