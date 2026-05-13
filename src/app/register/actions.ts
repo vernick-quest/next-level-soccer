@@ -155,7 +155,7 @@ export async function submitFamilyRegistration(data: FamilyRegistrationInput): P
     data: { user },
   } = await supabase.auth.getUser()
   if (!user) {
-    return { success: false, error: 'Please sign in before submitting registration.' }
+    return { success: false, error: 'Please log in before submitting registration.' }
   }
 
   const db = createServiceRoleClient()

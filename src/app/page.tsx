@@ -150,7 +150,7 @@ export default async function HomePage() {
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center pb-2 sm:pb-4">
               <Link
-                href="/register"
+                href="/create-account"
                 className="bg-[#f05a28] hover:bg-[#d94e21] text-white font-bold px-6 sm:px-8 py-3.5 sm:py-4 rounded-full text-base sm:text-lg transition-all shadow-lg shadow-[#3a1a0f]/40 hover:-translate-y-0.5 text-center leading-snug max-w-[min(100%,22rem)] sm:max-w-none mx-auto sm:mx-0"
               >
                 Register for Summer Camps 2026
@@ -245,7 +245,7 @@ export default async function HomePage() {
                 <div className="text-2xl font-bold text-slate-800 mb-2">Summer 2026</div>
                 <div className="text-slate-600 mb-6">Beach Chalet · Mon-Fri · 3:30-7:30 PM</div>
                 <Link
-                  href="/register"
+                  href="/create-account"
                   className="inline-block bg-[#f05a28] text-white font-bold px-6 py-3 rounded-full hover:bg-[#d94e21] transition-colors shadow-md"
                 >
                   Secure Your Spot
@@ -311,7 +311,7 @@ export default async function HomePage() {
                   </a>
                 ) : (
                   <Link
-                    href="/register"
+                    href="/create-account"
                     className="block w-full bg-[#062744] text-white font-semibold py-2.5 rounded-full hover:bg-[#041f36] transition-colors text-sm"
                   >
                     Register
@@ -370,7 +370,7 @@ export default async function HomePage() {
             Spots are limited and fill fast. Register today and give your player a summer they&apos;ll never forget.
           </p>
           <Link
-            href="/register"
+            href="/create-account"
             className="inline-block bg-[#f05a28] text-white font-bold px-10 py-4 rounded-full text-lg hover:bg-[#d94e21] transition-colors shadow-xl"
           >
             Register Now — Summer 2026

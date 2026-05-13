@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { useState, useTransition, useEffect, useCallback } from 'react'
+import { useState, useTransition, useEffect, useCallback, useMemo } from 'react'
 import type { User } from '@supabase/supabase-js'
 import { createClient } from '@/lib/supabase/client'
 import {
@@ -9,8 +9,6 @@ import {
   submitFamilyRegistration,
   type RegistrationChildInput,
 } from './actions'
-import GoogleOAuthButton from '@/components/GoogleOAuthButton'
-import ParentEmailAuthPanel from '@/components/ParentEmailAuthPanel'
 import { uploadChildPhoto } from '@/lib/supabase/storage-upload'
 import ChildAvatar from '@/components/ChildAvatar'
 import {
@@ -274,7 +272,6 @@ export default function RegistrationForm({ additionalChildMode = false }: { addi
       ...prev,
       parentFirstName: data.parent_first_name || prev.parentFirstName,
       parentLastName: data.parent_last_name || prev.parentLastName,
-      parentEmail: data.parent_email || prev.parentEmail,
       parentPhone: data.parent_phone ? formatUsPhoneAsYouType(data.parent_phone) : prev.parentPhone,
     }))
   }, [])
@@ -351,16 +348,30 @@ export default function RegistrationForm({ additionalChildMode = false }: { addi
   }, [additionalChildMode, applyUserToParent, hydrateParentFromLastRegistration])
 
   useEffect(() => {
+    const em = authUser?.email?.trim()
+    if (!em) return
+    setParent((p) => ({ ...p, parentEmail: em }))
+  }, [authUser?.email])
+
+  useEffect(() => {
     if (typeof window === 'undefined') return
     const params = new URLSearchParams(window.location.search)
     if (params.get('error') === 'auth') {
-      setError('Sign-in did not complete. Please try again.')
+      setError('Log-in did not complete. Please try again.')
       window.history.replaceState({}, '', window.location.pathname)
     }
   }, [])
 
+  const totalWeeksSelected = useMemo(
+    () => childrenList.reduce((sum, c) => sum + c.campWeeks.length, 0),
+    [childrenList],
+  )
+
+  const submitRegistrationReady = totalWeeksSelected > 0 && termsAccepted && !isPending && !isUploadingPhotos
+
   function handleParentChange(e: React.ChangeEvent<HTMLInputElement>) {
     const { name, value } = e.target
+    if (name === 'parentEmail' && authUser) return
     if (name === 'parentPhone') {
       setParent((prev) => ({ ...prev, [name]: formatUsPhoneAsYouType(value) }))
       return
@@ -522,7 +533,7 @@ export default function RegistrationForm({ additionalChildMode = false }: { addi
     }
 
     if (childrenList.some((c) => c.childPhotoFile) && !authUser) {
-      setError('Please sign in before uploading child photos.')
+      setError('Please log in before uploading child photos.')
       return
     }
 
@@ -631,7 +642,7 @@ export default function RegistrationForm({ additionalChildMode = false }: { addi
           onSubmit={(e) => {
             e.preventDefault()
             if (!authUser) {
-              setError('Please sign in or create an account above before continuing (Google, email, or magic link).')
+              setError('Please log in to continue. Use Log in or Create account if your session expired.')
               return
             }
             if (!parent.parentPhone.trim()) {
@@ -646,77 +657,88 @@ export default function RegistrationForm({ additionalChildMode = false }: { addi
             setStep(2)
           }}
         >
-          <SectionHeader step={1} title="Your account & parent information" />
+          <SectionHeader step={1} title="Parent information" />
 
-          {authUser ? (
-            <p className="text-sm text-slate-600 mb-4">
-              Signed in as <strong>{parent.parentEmail}</strong>. Add your phone number if you have not already.
-            </p>
+          {!authUser ? (
+            <div className="mb-6 rounded-xl border border-amber-200 bg-amber-50 px-4 py-4 text-sm text-amber-950">
+              <p className="font-semibold text-[#062744] mb-2">You need to be logged in</p>
+              <p className="text-slate-700 mb-3">
+                Camp registration opens after you sign in. Create an account first if you&apos;re new, then log in to
+                continue here.
+              </p>
+              <div className="flex flex-col sm:flex-row gap-2">
+                <Link
+                  href="/login?next=%2Fregister"
+                  className="inline-flex justify-center bg-[#062744] text-white font-semibold px-4 py-2 rounded-full text-sm hover:bg-[#041f36] transition-colors text-center"
+                >
+                  Log in
+                </Link>
+                <Link
+                  href="/create-account?next=%2Fregister"
+                  className="inline-flex justify-center border-2 border-[#f05a28] text-[#f05a28] font-semibold px-4 py-2 rounded-full text-sm hover:bg-[#fff8f3] transition-colors text-center"
+                >
+                  Create account
+                </Link>
+              </div>
+            </div>
           ) : (
-            <div className="mb-6 space-y-4">
-              <p className="text-sm text-slate-600 leading-relaxed">
-                Sign in or create an account as part of registration (required before you submit). Already registered? Use{' '}
-                <a href="/login?next=%2Fdashboard" className="text-[#f05a28] font-semibold hover:underline">
-                  Login
-                </a>{' '}
-                for your dashboard — new camp sign-ups stay on this page.
+            <>
+              <p className="text-sm text-slate-600 mb-4">
+                Signed in as <strong>{parent.parentEmail}</strong>. Add your phone number if you have not already. Your
+                account email is used for registration and cannot be changed here.
               </p>
-              <GoogleOAuthButton nextPath="/register" />
-              <ParentEmailAuthPanel variant="register" />
-              <p className="text-xs text-slate-500">
-                After you sign in, your email is locked to this account. You can still edit other parent fields below.
-              </p>
-            </div>
+
+              <div className="border-t border-[#e8d8ce] pt-6 mt-2">
+                <p className="text-xs font-semibold text-[#213c57] uppercase tracking-wide mb-4">Parent / guardian details</p>
+              </div>
+
+              {/* Honeypot: hidden from users; bots often fill this. */}
+              <div className="absolute w-px h-px overflow-hidden opacity-0 pointer-events-none" aria-hidden="true">
+                <label htmlFor="hp-company">Company</label>
+                <input
+                  id="hp-company"
+                  name="company"
+                  type="text"
+                  tabIndex={-1}
+                  autoComplete="off"
+                  value={hpCompany}
+                  onChange={(e) => setHpCompany(e.target.value)}
+                />
+              </div>
+
+              <div className="grid sm:grid-cols-2 gap-5">
+                <div>
+                  <Label required>Parent First Name</Label>
+                  <Input name="parentFirstName" placeholder="Jane" value={parent.parentFirstName} onChange={handleParentChange} required />
+                </div>
+                <div>
+                  <Label required>Parent Last Name</Label>
+                  <Input name="parentLastName" placeholder="Smith" value={parent.parentLastName} onChange={handleParentChange} required />
+                </div>
+                <div className="sm:col-span-2">
+                  <Label required>Parent Email Address</Label>
+                  <Input
+                    name="parentEmail"
+                    type="email"
+                    placeholder="jane@example.com"
+                    value={parent.parentEmail}
+                    onChange={handleParentChange}
+                    required
+                    readOnly
+                  />
+                  <p className="text-xs text-slate-500 mt-1">Locked to your account email for consistency with sign-in.</p>
+                </div>
+                <div className="sm:col-span-2">
+                  <Label required>Parent Phone Number</Label>
+                  <Input name="parentPhone" type="tel" placeholder="(415) 555-0100" value={parent.parentPhone} onChange={handleParentChange} required />
+                </div>
+              </div>
+
+              <button type="submit" className="mt-8 w-full bg-[#062744] hover:bg-[#041f36] text-white font-bold py-4 rounded-full text-lg transition-colors shadow-md">
+                Continue to Players
+              </button>
+            </>
           )}
-
-          <div className="border-t border-[#e8d8ce] pt-6 mt-2">
-            <p className="text-xs font-semibold text-[#213c57] uppercase tracking-wide mb-4">Parent / guardian details</p>
-          </div>
-
-          {/* Honeypot: hidden from users; bots often fill this. */}
-          <div className="absolute w-px h-px overflow-hidden opacity-0 pointer-events-none" aria-hidden="true">
-            <label htmlFor="hp-company">Company</label>
-            <input
-              id="hp-company"
-              name="company"
-              type="text"
-              tabIndex={-1}
-              autoComplete="off"
-              value={hpCompany}
-              onChange={(e) => setHpCompany(e.target.value)}
-            />
-          </div>
-
-          <div className="grid sm:grid-cols-2 gap-5">
-            <div>
-              <Label required>Parent First Name</Label>
-              <Input name="parentFirstName" placeholder="Jane" value={parent.parentFirstName} onChange={handleParentChange} required />
-            </div>
-            <div>
-              <Label required>Parent Last Name</Label>
-              <Input name="parentLastName" placeholder="Smith" value={parent.parentLastName} onChange={handleParentChange} required />
-            </div>
-            <div className="sm:col-span-2">
-              <Label required>Parent Email Address</Label>
-              <Input
-                name="parentEmail"
-                type="email"
-                placeholder="jane@example.com"
-                value={parent.parentEmail}
-                onChange={handleParentChange}
-                required
-                readOnly={!!authUser}
-              />
-            </div>
-            <div className="sm:col-span-2">
-              <Label required>Parent Phone Number</Label>
-              <Input name="parentPhone" type="tel" placeholder="(415) 555-0100" value={parent.parentPhone} onChange={handleParentChange} required />
-            </div>
-          </div>
-
-          <button type="submit" className="mt-8 w-full bg-[#062744] hover:bg-[#041f36] text-white font-bold py-4 rounded-full text-lg transition-colors shadow-md">
-            Continue to Players
-          </button>
         </form>
       )}
 
@@ -1058,8 +1080,12 @@ export default function RegistrationForm({ additionalChildMode = false }: { addi
             <button
               type="button"
               onClick={() => void submitAll()}
-              disabled={isPending || isUploadingPhotos || !termsAccepted}
-              className="w-2/3 bg-[#062744] hover:bg-[#041f36] disabled:bg-[#4b6782] text-white font-bold py-3 rounded-full transition-colors shadow-md disabled:cursor-not-allowed"
+              disabled={isPending || isUploadingPhotos || !termsAccepted || totalWeeksSelected === 0}
+              className={`w-2/3 text-white font-bold py-3 rounded-full transition-colors shadow-md disabled:cursor-not-allowed ${
+                submitRegistrationReady
+                  ? 'bg-[#f59e0b] hover:bg-[#d97706] disabled:opacity-60'
+                  : 'bg-[#062744] hover:bg-[#041f36] disabled:bg-[#4b6782]'
+              }`}
             >
               {isUploadingPhotos ? 'Uploading photos…' : isPending ? 'Submitting…' : 'Submit registration'}
             </button>

@@ -26,21 +26,21 @@ export default async function DashboardPage() {
             <div className="bg-white border border-[#e8d8ce] rounded-2xl p-8 text-center">
               <h1 className="text-2xl font-extrabold text-[#062744] mb-3">Parent Dashboard</h1>
               <p className="text-slate-600 mb-6">
-                Already registered? Log in to open your parent dashboard. New to camp this season? Start on registration — that
-                flow creates your account.
+                Log in to open your parent dashboard. New to camp? Create an account first, then complete registration for
+                your players.
               </p>
               <div className="flex flex-col sm:flex-row gap-3 justify-center">
                 <Link
                   href="/login?next=%2Fdashboard"
                   className="inline-block bg-[#062744] text-white font-semibold px-6 py-3 rounded-full hover:bg-[#041f36] transition-colors"
                 >
-                  Login
+                  Log in
                 </Link>
                 <Link
-                  href="/register"
+                  href="/create-account?next=%2Fregister"
                   className="inline-block bg-[#f05a28] text-white font-semibold px-6 py-3 rounded-full hover:bg-[#d94e21] transition-colors"
                 >
-                  Register for camp
+                  Create account
                 </Link>
               </div>
             </div>

@@ -77,12 +77,12 @@ export default function Navbar() {
                 <Link
                   href="/login?next=%2Fdashboard"
                   className="text-[#264765] font-semibold hover:text-[#f05a28] transition-colors whitespace-nowrap"
-                  title="Already registered? Sign in to open your parent dashboard"
+                  title="Already registered? Log in to open your parent dashboard"
                 >
-                  Login
+                  Log In
                 </Link>
                 <Link
-                  href="/register"
+                  href="/create-account"
                   className="bg-[#f05a28] text-white px-4 lg:px-5 py-2 rounded-full hover:bg-[#d94e21] transition-colors font-semibold whitespace-nowrap"
                 >
                   Register Now
@@ -138,13 +138,13 @@ export default function Navbar() {
               <Link
                 href="/login?next=%2Fdashboard"
                 className="block text-center py-2 text-[#264765] font-semibold hover:text-[#f05a28]"
-                title="Already registered? Sign in to open your parent dashboard"
+                title="Already registered? Log in to open your parent dashboard"
                 onClick={() => setMenuOpen(false)}
               >
-                Login
+                Log In
               </Link>
               <Link
-                href="/register"
+                href="/create-account"
                 className="block bg-[#f05a28] text-white text-center py-2.5 rounded-full hover:bg-[#d94e21] transition-colors font-semibold"
                 onClick={() => setMenuOpen(false)}
               >

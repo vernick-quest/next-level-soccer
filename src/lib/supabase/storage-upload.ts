@@ -13,7 +13,7 @@ export async function uploadChildPhoto(file: File, childId: string) {
   } = await supabase.auth.getUser()
 
   if (userError || !user) {
-    return { publicUrl: null as string | null, error: 'Please sign in before uploading photos.' }
+    return { publicUrl: null as string | null, error: 'Please log in before uploading photos.' }
   }
 
   if (!isChildProfilePhotoMime(file.type)) {

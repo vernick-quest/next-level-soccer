@@ -7,9 +7,9 @@ import { createClient } from '@/lib/supabase/client'
 type Tab = 'password' | 'magic' | 'signup'
 
 type Props = {
-  /** `register`: sign-in + create account + magic (new families). `returning`: sign-in + magic only. */
-  variant: 'register' | 'returning'
-  /** After password sign-in when `variant` is `returning` (e.g. `/dashboard`). Ignored for `register`. */
+  /** `returning`: log in on parent login page. `createAccount`: sign-up + magic only (no password log-in on this screen). */
+  variant: 'returning' | 'createAccount'
+  /** After OAuth / magic link (e.g. `/dashboard` or `/register`). */
   redirectPath?: string
   className?: string
 }
@@ -20,7 +20,7 @@ export default function ParentEmailAuthPanel({
   className = '',
 }: Props) {
   const router = useRouter()
-  const [tab, setTab] = useState<Tab>('password')
+  const [tab, setTab] = useState<Tab>(variant === 'createAccount' ? 'signup' : 'password')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
@@ -29,7 +29,6 @@ export default function ParentEmailAuthPanel({
   const [loading, setLoading] = useState(false)
 
   const safeNext = redirectPath.startsWith('/') ? redirectPath : `/${redirectPath}`
-  const registerNext = '/register'
 
   async function signInWithPassword() {
     setError(null)
@@ -50,9 +49,7 @@ export default function ParentEmailAuthPanel({
       setError(err.message)
       return
     }
-    if (variant === 'returning') {
-      router.push(safeNext)
-    }
+    router.push(safeNext)
     router.refresh()
   }
 
@@ -67,12 +64,11 @@ export default function ParentEmailAuthPanel({
     setLoading(true)
     const supabase = createClient()
     const origin = window.location.origin
-    const next = variant === 'register' ? registerNext : safeNext
     const { error: err } = await supabase.auth.signInWithOtp({
       email: trimmed,
       options: {
-        emailRedirectTo: `${origin}/auth/callback?next=${encodeURIComponent(next)}`,
-        shouldCreateUser: variant === 'register',
+        emailRedirectTo: `${origin}/auth/callback?next=${encodeURIComponent(safeNext)}`,
+        shouldCreateUser: variant === 'createAccount',
       },
     })
     setLoading(false)
@@ -80,7 +76,7 @@ export default function ParentEmailAuthPanel({
       setError(err.message)
       return
     }
-    setInfo('Check your email for the sign-in link. You can close this page.')
+    setInfo('Check your email for the link. You can close this page.')
   }
 
   async function signUpWithPassword() {
@@ -102,11 +98,11 @@ export default function ParentEmailAuthPanel({
     setLoading(true)
     const supabase = createClient()
     const origin = window.location.origin
-    const { error: err } = await supabase.auth.signUp({
+    const { data, error: err } = await supabase.auth.signUp({
       email: trimmed,
       password,
       options: {
-        emailRedirectTo: `${origin}/auth/callback?next=${encodeURIComponent(registerNext)}`,
+        emailRedirectTo: `${origin}/auth/callback?next=${encodeURIComponent(safeNext)}`,
       },
     })
     setLoading(false)
@@ -114,29 +110,26 @@ export default function ParentEmailAuthPanel({
       setError(err.message)
       return
     }
-    setInfo(
-      'Account created. If email confirmation is required, check your inbox; otherwise you are signed in and can continue below.',
-    )
-    router.refresh()
+    if (data.session) {
+      await supabase.auth.signOut()
+    }
+    router.push('/login?verifyEmail=1')
   }
 
   const tabs: [Tab, string][] =
-    variant === 'register'
+    variant === 'createAccount'
       ? [
-          ['password', 'Sign in'],
-          ['signup', 'Create password'],
+          ['signup', 'Create account'],
           ['magic', 'Magic link'],
         ]
       : [
-          ['password', 'Sign in'],
+          ['password', 'Log in'],
           ['magic', 'Magic link'],
         ]
 
   return (
     <div className={`rounded-xl border border-[#e8d8ce] bg-[#faf8f5] p-4 sm:p-5 ${className}`}>
-      <p className="text-xs font-semibold text-[#213c57] uppercase tracking-wide mb-3">
-        {variant === 'register' ? 'Or use email' : 'Or use email'}
-      </p>
+      <p className="text-xs font-semibold text-[#213c57] uppercase tracking-wide mb-3">Or use email</p>
 
       <div className="flex flex-wrap gap-2 mb-4">
         {tabs.map(([id, label]) => (
@@ -212,7 +205,7 @@ export default function ParentEmailAuthPanel({
             onClick={() => void signInWithPassword()}
             className="w-full bg-[#062744] hover:bg-[#041f36] disabled:bg-[#4b6782] text-white font-bold py-2.5 rounded-full text-sm transition-colors disabled:cursor-not-allowed"
           >
-            {loading ? 'Signing in…' : 'Sign in'}
+            {loading ? 'Logging in…' : 'Log in'}
           </button>
         )}
 
@@ -234,7 +227,7 @@ export default function ParentEmailAuthPanel({
             onClick={() => void signUpWithPassword()}
             className="w-full bg-[#062744] hover:bg-[#041f36] disabled:bg-[#4b6782] text-white font-bold py-2.5 rounded-full text-sm transition-colors disabled:cursor-not-allowed"
           >
-            {loading ? 'Creating…' : 'Create account & continue'}
+            {loading ? 'Creating…' : 'Create account'}
           </button>
         )}
       </div>
