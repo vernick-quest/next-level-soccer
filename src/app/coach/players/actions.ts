@@ -8,6 +8,11 @@ import {
   signChildProfilePhotoUrlForDisplay,
   signChildProfilePhotoUrlsUnique,
 } from '@/lib/supabase/child-profile-signed-url'
+import {
+  mergePlayerReportsByCampSession,
+  type PlayerReportRowForMerge,
+  type ReportGridWeekSnapshot,
+} from '@/lib/player-reports-merge'
 
 export type CoachDirectoryPlayerRow = {
   id: string
@@ -54,6 +59,10 @@ export type CoachDirectoryPlayerProfile = {
   child_photo_url: string | null
   parent: CoachDirectoryParentBlock
   activity: CoachDirectoryActivityItem[]
+  /** Same shape as parent dashboard: latest report per camp week. */
+  reportsByWeekKey: Record<string, ReportGridWeekSnapshot>
+  /** `camp_session` values from `registrations` for this player (name-matched rows). */
+  registeredCampSessions: string[]
 }
 
 function trimName(s: string | null | undefined) {
@@ -209,11 +218,21 @@ export async function getPlayerDirectoryProfileForStaff(
 
   const { data: reps, error: repErr } = await service
     .from('player_reports')
-    .select('id, camp_session, date_generated, parent_email_sent_at, coach_comments')
+    .select('*')
     .eq('registration_child_id', id)
     .order('date_generated', { ascending: false })
 
   if (repErr) console.error('getPlayerDirectoryProfileForStaff reports:', repErr)
+
+  const reportsByWeekKey = mergePlayerReportsByCampSession((reps ?? []) as PlayerReportRowForMerge[])
+
+  const registeredCampSessions = [
+    ...new Set(
+      (regs ?? [])
+        .map((r) => ((r.camp_session as string | null) ?? '').trim())
+        .filter((w) => w.length > 0),
+    ),
+  ]
 
   const activity: CoachDirectoryActivityItem[] = []
 
@@ -289,6 +308,8 @@ export async function getPlayerDirectoryProfileForStaff(
     child_photo_url: signedPhoto,
     parent,
     activity,
+    reportsByWeekKey,
+    registeredCampSessions,
   }
 
   return { profile, error: null }

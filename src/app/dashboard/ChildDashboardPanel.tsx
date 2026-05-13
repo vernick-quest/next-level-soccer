@@ -1,5 +1,6 @@
 'use client'
 
+import { useMemo } from 'react'
 import { campNameFromWeekLabel, campDatesFromWeekLabel } from '@/lib/camp-display'
 import { CAMP_WEEK_PRICE_CENTS } from '@/lib/camp-pricing'
 import { REFUND_DEADLINE_LABEL } from '@/lib/refund-deadline'
@@ -224,6 +225,10 @@ export default function ChildDashboardPanel({
 }) {
   const name = `${child.firstName} ${child.lastName}`.trim()
   const showIncremental = !!incrementalChild && !!child.registrationChildId
+  const enrolledCampWeekKeys = useMemo(
+    () => new Set(child.weeks.filter((w) => w.registrationId).map((w) => w.week)),
+    [child.weeks],
+  )
 
   function weekActions(tile: DashboardWeekTile) {
     const camp = tile.registrationId ? findCamp(camps, tile.registrationId) : undefined
@@ -395,7 +400,8 @@ export default function ChildDashboardPanel({
       <section>
         <h3 className="text-base font-bold text-[#062744] mb-2">Coach report cards</h3>
         <p className="text-sm text-slate-600 mb-3">
-          Scores are 1–5 on each skill. Empty cells mean no report has been submitted for that week yet.
+          Scores are 1–5 on each skill. A dash in a white column means the player was enrolled that week but no report
+          has been submitted yet. Grey columns are weeks they were not enrolled.
         </p>
         {!child.registrationChildId && (
           <p className="text-sm text-slate-600 bg-white border border-[#e8d8ce] rounded-xl px-4 py-3">
@@ -404,7 +410,7 @@ export default function ChildDashboardPanel({
           </p>
         )}
         {child.registrationChildId && (
-          <ReportSkillsGrid reportsByWeekKey={child.reportsByWeekKey} />
+          <ReportSkillsGrid reportsByWeekKey={child.reportsByWeekKey} enrolledWeekKeys={enrolledCampWeekKeys} />
         )}
       </section>
 

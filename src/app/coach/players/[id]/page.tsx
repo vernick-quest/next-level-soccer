@@ -8,6 +8,7 @@ import CoachesWrongAccount from '@/app/coaches/CoachesWrongAccount'
 import { campNameFromWeekLabel } from '@/lib/camp-display'
 import { CoachAreaHeader } from '../CoachAreaHeader'
 import { getPlayerDirectoryProfileForStaff } from '../actions'
+import ReportSkillsGrid from '@/app/dashboard/ReportSkillsGrid'
 
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -179,6 +180,19 @@ export default async function CoachPlayerProfilePage({ params }: { params: Promi
               <div className="text-slate-500 text-sm italic sm:flex sm:items-end">No second parent on file.</div>
             )}
           </div>
+        </section>
+
+        <section className="rounded-2xl border border-[#e8d8ce] bg-white p-6 sm:p-8 shadow-sm">
+          <h3 className="text-lg font-extrabold text-[#062744] border-b border-[#f0e2d9] pb-2 mb-2">Coach report cards</h3>
+          <p className="text-sm text-slate-600 mb-4">
+            Read-only view of submitted scores by camp week (same grid families see on the parent dashboard). A dash in
+            a white column means the player was enrolled that week but no report is on file yet. Grey columns are weeks
+            they were not enrolled in camp.
+          </p>
+          <ReportSkillsGrid
+            reportsByWeekKey={profile.reportsByWeekKey}
+            enrolledWeekKeys={profile.registeredCampSessions}
+          />
         </section>
 
         <section className="rounded-2xl border border-[#e8d8ce] bg-white p-6 sm:p-8 shadow-sm">

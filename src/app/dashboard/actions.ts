@@ -14,7 +14,11 @@ import { signChildProfilePhotoUrlsUnique } from '@/lib/supabase/child-profile-si
 import { getOwnerEmail } from '@/lib/admin'
 import { getWeekSpotUsage, validateCampWeekCapacityForSubmission } from '@/lib/home-camp-spots'
 import { isRefundWindowOpenPacific } from '@/lib/refund-deadline'
-import { ALL_REPORT_METRIC_KEYS, type ReportMetricKey } from '@/lib/player-report-metrics'
+import {
+  mergePlayerReportsByCampSession,
+  type PlayerReportRowForMerge,
+  type ReportGridWeekSnapshot,
+} from '@/lib/player-reports-merge'
 
 const KNOWN_WEEKS = new Set<string>(CAMP_SESSIONS)
 
@@ -86,12 +90,7 @@ export type DashboardWeekTile = {
   registrationId: string | null
 }
 
-export type DashboardReportSnapshot = {
-  id: string
-  scores: Partial<Record<ReportMetricKey, number>>
-  coachComments: string | null
-  dateGenerated: string
-}
+export type DashboardReportSnapshot = ReportGridWeekSnapshot
 
 /** One tab: one registered child (or legacy grouped camps). */
 export type DashboardChildView = {
@@ -241,44 +240,6 @@ async function applySignedUrlsToCampsAndIncrementalChildren(
   }
 }
 
-type PlayerReportDbRow = {
-  id: string
-  registration_child_id: string
-  camp_session: string | null
-  coach_comments: string | null
-  date_generated: string
-} & Record<ReportMetricKey, number | null>
-
-function reportRowToSnapshot(row: PlayerReportDbRow): DashboardReportSnapshot {
-  const scores: Partial<Record<ReportMetricKey, number>> = {}
-  for (const k of ALL_REPORT_METRIC_KEYS) {
-    const v = row[k]
-    if (typeof v === 'number' && v >= 1 && v <= 5) scores[k] = v
-  }
-  return {
-    id: row.id,
-    scores,
-    coachComments: row.coach_comments,
-    dateGenerated: row.date_generated,
-  }
-}
-
-function mergeReportsByWeek(rows: PlayerReportDbRow[]): Record<string, DashboardReportSnapshot> {
-  const best = new Map<string, PlayerReportDbRow>()
-  for (const r of rows) {
-    const key = r.camp_session?.trim() || '__legacy__'
-    const prev = best.get(key)
-    if (!prev || new Date(r.date_generated) >= new Date(prev.date_generated)) {
-      best.set(key, r)
-    }
-  }
-  const out: Record<string, DashboardReportSnapshot> = {}
-  for (const [k, r] of best) {
-    out[k] = reportRowToSnapshot(r)
-  }
-  return out
-}
-
 async function fetchParentReportsMap(
   supabase: Awaited<ReturnType<typeof createClient>>,
   childIds: string[],
@@ -290,15 +251,15 @@ async function fetchParentReportsMap(
     console.error('fetchParentReportsMap:', error)
     return map
   }
-  const byChild = new Map<string, PlayerReportDbRow[]>()
+  const byChild = new Map<string, PlayerReportRowForMerge[]>()
   for (const row of data ?? []) {
-    const raw = row as PlayerReportDbRow
+    const raw = row as PlayerReportRowForMerge
     const cid = raw.registration_child_id
     if (!byChild.has(cid)) byChild.set(cid, [])
     byChild.get(cid)!.push(raw)
   }
   for (const [cid, rows] of byChild) {
-    map.set(cid, mergeReportsByWeek(rows))
+    map.set(cid, mergePlayerReportsByCampSession(rows))
   }
   return map
 }
