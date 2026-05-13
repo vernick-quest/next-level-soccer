@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
+import { getPostLoginRedirectPath } from '@/app/login/actions'
 
 type Tab = 'password' | 'magic' | 'signup'
 
@@ -49,7 +50,8 @@ export default function ParentEmailAuthPanel({
       setError(err.message)
       return
     }
-    router.push(safeNext)
+    const path = await getPostLoginRedirectPath(safeNext)
+    router.push(path)
     router.refresh()
   }
 

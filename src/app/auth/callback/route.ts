@@ -1,11 +1,12 @@
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse } from 'next/server'
 import { cookies } from 'next/headers'
+import { resolvePostLoginRedirect } from '@/lib/post-login-redirect'
 
 export async function GET(request: Request) {
   const { searchParams, origin } = new URL(request.url)
   const code = searchParams.get('code')
-  const next = searchParams.get('next') ?? '/register'
+  const next = searchParams.get('next') ?? '/dashboard'
 
   if (code) {
     const cookieStore = await cookies()
@@ -29,7 +30,14 @@ export async function GET(request: Request) {
 
     const { error } = await supabase.auth.exchangeCodeForSession(code)
     if (!error) {
-      return NextResponse.redirect(`${origin}${next.startsWith('/') ? next : `/${next}`}`)
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
+      if (!user) {
+        return NextResponse.redirect(`${origin}/login?error=auth`)
+      }
+      const destination = await resolvePostLoginRedirect(supabase, user, next)
+      return NextResponse.redirect(`${origin}${destination.startsWith('/') ? destination : `/${destination}`}`)
     }
   }
 

@@ -1083,7 +1083,7 @@ export default function RegistrationForm({ additionalChildMode = false }: { addi
               disabled={isPending || isUploadingPhotos || !termsAccepted || totalWeeksSelected === 0}
               className={`w-2/3 text-white font-bold py-3 rounded-full transition-colors shadow-md disabled:cursor-not-allowed ${
                 submitRegistrationReady
-                  ? 'bg-[#f59e0b] hover:bg-[#d97706] disabled:opacity-60'
+                  ? 'bg-[#f05a28] hover:bg-[#d94e21] disabled:opacity-60'
                   : 'bg-[#062744] hover:bg-[#041f36] disabled:bg-[#4b6782]'
               }`}
             >
