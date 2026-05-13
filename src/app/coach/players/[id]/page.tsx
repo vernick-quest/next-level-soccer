@@ -90,40 +90,37 @@ export default async function CoachPlayerProfilePage({ params }: { params: Promi
                 <p className="text-xs font-bold uppercase tracking-widest text-[#f05a28] mb-1">Player file</p>
                 <h2 className="text-3xl sm:text-4xl font-extrabold text-[#062744] leading-tight">{fullName}</h2>
                 <dl className="mt-5 grid sm:grid-cols-2 gap-x-6 gap-y-3 text-sm">
-                  {/* Row 1: DOB | Primary (right column stacks positions + club) */}
                   <div>
                     <dt className="text-xs font-bold uppercase text-slate-500">Date of birth</dt>
                     <dd className="text-[#062744] font-semibold">{formatDob(profile.player_dob)}</dd>
-                  </div>
-                  <div>
-                    <dt className="text-xs font-bold uppercase text-slate-500">Primary position</dt>
-                    <dd className="text-[#062744] font-semibold">{profile.primary_position_label || '—'}</dd>
-                  </div>
-                  {/* Row 2: Playing level | Secondary (same row) */}
-                  <div>
-                    <dt className="text-xs font-bold uppercase text-slate-500">Playing level</dt>
-                    <dd className="text-[#062744] font-semibold">{profile.playing_level?.trim() || '—'}</dd>
-                  </div>
-                  <div>
-                    <dt className="text-xs font-bold uppercase text-slate-500">Secondary position</dt>
-                    <dd className="text-[#062744] font-semibold">{profile.secondary_position_label || '—'}</dd>
-                  </div>
-                  {/* Row 3: Pronouns | Current club (club column aligned under primary) */}
-                  <div>
-                    <dt className="text-xs font-bold uppercase text-slate-500">Pronouns</dt>
-                    <dd className="text-[#062744] font-semibold">{profile.player_pronouns?.trim() || '—'}</dd>
                   </div>
                   <div>
                     <dt className="text-xs font-bold uppercase text-slate-500">Current club</dt>
                     <dd className="text-[#062744] font-semibold">{profile.soccer_club || '—'}</dd>
                   </div>
                   <div>
-                    <dt className="text-xs font-bold uppercase text-slate-500">Grade (fall)</dt>
-                    <dd className="text-[#062744] font-semibold">{profile.grade_fall || '—'}</dd>
+                    <dt className="text-xs font-bold uppercase text-slate-500">Pronouns</dt>
+                    <dd className="text-[#062744] font-semibold">{profile.player_pronouns?.trim() || '—'}</dd>
+                  </div>
+                  <div>
+                    <dt className="text-xs font-bold uppercase text-slate-500">Playing level</dt>
+                    <dd className="text-[#062744] font-semibold">{profile.playing_level?.trim() || '—'}</dd>
                   </div>
                   <div>
                     <dt className="text-xs font-bold uppercase text-slate-500">School (fall)</dt>
                     <dd className="text-[#062744] font-semibold">{profile.school_fall || '—'}</dd>
+                  </div>
+                  <div>
+                    <dt className="text-xs font-bold uppercase text-slate-500">Primary position</dt>
+                    <dd className="text-[#062744] font-semibold">{profile.primary_position_label || '—'}</dd>
+                  </div>
+                  <div>
+                    <dt className="text-xs font-bold uppercase text-slate-500">Grade (fall)</dt>
+                    <dd className="text-[#062744] font-semibold">{profile.grade_fall || '—'}</dd>
+                  </div>
+                  <div>
+                    <dt className="text-xs font-bold uppercase text-slate-500">Secondary position</dt>
+                    <dd className="text-[#062744] font-semibold">{profile.secondary_position_label || '—'}</dd>
                   </div>
                 </dl>
                 {profile.camp_weeks_requested.length > 0 ? (
