@@ -22,6 +22,12 @@ export function CoachAreaHeader({
       </div>
       <div className="flex flex-wrap gap-2 shrink-0">
         <Link
+          href="/coach/players/new"
+          className="text-sm font-bold border-2 border-[#062744] text-[#062744] px-4 py-2.5 rounded-full hover:bg-[#062744] hover:text-white transition-colors"
+        >
+          Manual registration
+        </Link>
+        <Link
           href="/coaches"
           className="text-sm font-bold bg-[#062744] text-white px-4 py-2.5 rounded-full hover:bg-[#041f36] transition-colors"
         >

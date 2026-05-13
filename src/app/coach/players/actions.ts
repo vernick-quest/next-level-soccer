@@ -64,6 +64,8 @@ export type CoachDirectoryPlayerProfile = {
   reportsByWeekKey: Record<string, ReportGridWeekSnapshot>
   /** `camp_session` values from `registrations` for this player (name-matched rows). */
   registeredCampSessions: string[]
+  /** Per-row registration weeks for staff week management (pending vs confirmed). */
+  registeredWeekDetails: { registration_id: string; camp_session: string; status: string }[]
 }
 
 function trimName(s: string | null | undefined) {
@@ -239,6 +241,12 @@ export async function getPlayerDirectoryProfileForStaff(
     ),
   ]
 
+  const registeredWeekDetails = (regs ?? []).map((r) => ({
+    registration_id: r.id as string,
+    camp_session: trimName(r.camp_session as string | null) || '',
+    status: (trimName(r.status as string | null) || 'pending').toLowerCase(),
+  }))
+
   const activity: CoachDirectoryActivityItem[] = []
 
   for (const r of regs ?? []) {
@@ -332,6 +340,7 @@ export async function getPlayerDirectoryProfileForStaff(
     activity,
     reportsByWeekKey,
     registeredCampSessions,
+    registeredWeekDetails,
   }
 
   return { profile, error: null }

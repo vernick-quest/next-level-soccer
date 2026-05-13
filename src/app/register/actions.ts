@@ -58,7 +58,7 @@ export type ActionResult =
 
 
 /** Postgres `date` — HTML date input is usually YYYY-MM-DD; normalize edge cases. */
-function sanitizePlayerDobForDb(dob: string): string {
+export function sanitizePlayerDobForDb(dob: string): string {
   const t = dob.trim()
   if (/^\d{4}-\d{2}-\d{2}$/.test(t)) return t
   const d = new Date(t)
@@ -66,7 +66,7 @@ function sanitizePlayerDobForDb(dob: string): string {
   return t
 }
 
-function playerExperienceForRegistrations(child: RegistrationChildInput): string {
+export function playerExperienceForRegistrations(child: RegistrationChildInput): string {
   if (child.playerExperienceLevel === 'other') {
     return child.playerExperienceOther.trim() || 'Other'
   }
@@ -74,7 +74,7 @@ function playerExperienceForRegistrations(child: RegistrationChildInput): string
 }
 
 /** One `registrations` row per camp week (dashboard + spot counter use this table). */
-function buildRegistrationsRows(
+export function buildRegistrationsRows(
   data: FamilyRegistrationInput,
   userId: string,
   submissionId: string,

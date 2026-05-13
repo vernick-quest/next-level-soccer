@@ -9,6 +9,7 @@ import { campNameFromWeekLabel } from '@/lib/camp-display'
 import { CoachAreaHeader } from '../CoachAreaHeader'
 import { getPlayerDirectoryProfileForStaff } from '../actions'
 import ReportSkillsGrid from '@/app/dashboard/ReportSkillsGrid'
+import CoachPlayerCampWeeksPanel from '../CoachPlayerCampWeeksPanel'
 
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -185,6 +186,8 @@ export default async function CoachPlayerProfilePage({ params }: { params: Promi
             )}
           </div>
         </section>
+
+        <CoachPlayerCampWeeksPanel childId={profile.id} rows={profile.registeredWeekDetails} />
 
         <section className="rounded-2xl border border-[#e8d8ce] bg-white p-6 sm:p-8 shadow-sm">
           <h3 className="text-lg font-extrabold text-[#062744] border-b border-[#f0e2d9] pb-2 mb-2">Coach report cards</h3>
