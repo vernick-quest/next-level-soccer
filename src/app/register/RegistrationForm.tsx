@@ -251,7 +251,6 @@ export default function RegistrationForm({ additionalChildMode = false }: { addi
   const [termsAccepted, setTermsAccepted] = useState(false)
   const [isUploadingPhotos, setIsUploadingPhotos] = useState(false)
   const [isPending, startTransition] = useTransition()
-  const [submitted, setSubmitted] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [photoChildIdBusy, setPhotoChildIdBusy] = useState<string | null>(null)
   /** Honeypot — must stay empty; bots often fill hidden fields. */
@@ -587,7 +586,7 @@ export default function RegistrationForm({ additionalChildMode = false }: { addi
           hpCompany,
         })
         if (result.success) {
-          setSubmitted(true)
+          window.location.assign('/dashboard?registered=1')
         } else {
           setError(result.error)
         }
@@ -601,36 +600,6 @@ export default function RegistrationForm({ additionalChildMode = false }: { addi
   if (!authReady) {
     return (
       <div className="text-center py-12 text-slate-600 text-sm">Loading…</div>
-    )
-  }
-
-  if (submitted) {
-    return (
-      <div className="text-center py-16 px-6">
-        <div className="text-6xl mb-6">🎉</div>
-        <h2 className="text-3xl font-extrabold text-slate-900 mb-3">Weeks Reserved!</h2>
-        <p className="text-slate-600 max-w-2xl mx-auto mb-8">
-          Thanks, <strong>{parent.parentFirstName}</strong>. Your requested weeks have been reserved for each player below.
-          A registration email will be sent to <strong>{parent.parentEmail}</strong>. Pay the total via Zelle or Venmo to confirm spots.
-        </p>
-        <div className="max-w-2xl mx-auto text-left bg-[#fff3ec] border border-[#f6d6c8] text-[#9b3e1f] px-5 py-4 rounded-xl text-sm">
-          {childrenList.map((item) => (
-            <div key={item.id} className="mb-2 last:mb-0">
-              <strong>{formatChildName(item) || 'Player'}:</strong> {item.campWeeks.join(', ')}
-              {item.childPhotoUrl ? (
-                <div className="mt-2">
-                  <ChildAvatar
-                    photoUrl={item.childPhotoUrl}
-                    alt={`${formatChildName(item) || 'Player'} profile`}
-                    sizeClass="w-12 h-12"
-                  />
-                </div>
-              ) : null}
-            </div>
-          ))}
-          <div className="mt-3 font-bold">Total due: ${calculateTotal()}</div>
-        </div>
-      </div>
     )
   }
 

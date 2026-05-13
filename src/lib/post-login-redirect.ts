@@ -1,6 +1,7 @@
 import type { User } from '@supabase/supabase-js'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { isStaffAdminEmail } from '@/lib/admin'
+import { createServiceRoleClient } from '@/lib/supabase/server'
 
 /** Normalize `next` to an internal path; reject obvious open redirects. */
 export function normalizeInternalNext(raw: string | null | undefined): string {
@@ -12,15 +13,11 @@ export function normalizeInternalNext(raw: string | null | undefined): string {
   return p
 }
 
-/**
- * Count `registration_children` rows tied to this user via `registration_submissions.auth_user_id` (= auth.uid()).
- * Used for post-login parent routing (Scenario A vs B).
- */
-export async function countRegistrationChildrenForUser(
-  supabase: SupabaseClient,
+async function countRegistrationChildrenWithClient(
+  client: SupabaseClient,
   authUserId: string,
 ): Promise<number> {
-  const { data: subs, error: subErr } = await supabase
+  const { data: subs, error: subErr } = await client
     .from('registration_submissions')
     .select('id')
     .eq('auth_user_id', authUserId)
@@ -28,13 +25,29 @@ export async function countRegistrationChildrenForUser(
   if (subErr || !subs?.length) return 0
 
   const ids = subs.map((s) => s.id as string)
-  const { count, error: chErr } = await supabase
+  const { count, error: chErr } = await client
     .from('registration_children')
     .select('id', { count: 'exact', head: true })
     .in('submission_id', ids)
 
   if (chErr) return 0
   return count ?? 0
+}
+
+/**
+ * Count `registration_children` for this auth user (via `registration_submissions.auth_user_id`).
+ * Prefer service role so counts are correct even if RLS on nested reads misbehaves for the user session.
+ */
+export async function countRegistrationChildrenForUser(
+  supabaseUserSession: SupabaseClient,
+  authUserId: string,
+): Promise<number> {
+  try {
+    const sr = createServiceRoleClient()
+    return await countRegistrationChildrenWithClient(sr, authUserId)
+  } catch {
+    return countRegistrationChildrenWithClient(supabaseUserSession, authUserId)
+  }
 }
 
 async function isStaffOrCoachPortalUser(supabase: SupabaseClient, user: User): Promise<boolean> {
@@ -50,16 +63,13 @@ async function isStaffOrCoachPortalUser(supabase: SupabaseClient, user: User): P
 }
 
 /**
- * Where to send the user after a successful session (Google SSO, magic link, or email/password — all use this via
- * `/auth/callback` or `getPostLoginRedirectPath` after password sign-in).
+ * Where to send the user after a successful session (Google SSO / magic link → `/auth/callback`,
+ * email/password → `/auth/post-login` full navigation, or any code path that calls this).
  *
- * **Staff:** `/coaches`, unless `next` is under `/admin` (admin Google sign-in).
+ * **Staff:** `/coaches`, unless `next` is under `/admin`.
  *
- * **Parents (non-staff):**
- * - **Scenario A — Returning parent:** ≥1 `registration_children` for their submissions → `/dashboard`.
- * - **Scenario B — New parent:** zero children → `/register` (onboarding / child registration).
- * - If `next` already starts with `/register` (e.g. `?additionalChild=1`), that path is kept.
- * - Otherwise a safe non-default `next` is honored; default landing is `/dashboard` when they have children.
+ * **Parents:** `next` starting with `/register` is kept. Otherwise count children: 0 → `/register`,
+ * else `/dashboard` (or another safe explicit `next`).
  */
 export async function resolvePostLoginRedirect(
   supabase: SupabaseClient,

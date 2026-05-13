@@ -11,7 +11,14 @@ export const metadata = {
   description: 'Parent Portal dashboard for camp registrations.',
 }
 
-export default async function DashboardPage() {
+export default async function DashboardPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ registered?: string }>
+}) {
+  const sp = await searchParams
+  const showRegistrationWelcome = sp.registered === '1'
+
   const supabase = await createClient()
   const {
     data: { user },
@@ -57,7 +64,13 @@ export default async function DashboardPage() {
   return (
     <>
       <Navbar />
-      <DashboardClient initialCamps={camps} incremental={incremental} children={children} refundWindowOpen={refundWindowOpen} />
+      <DashboardClient
+        initialCamps={camps}
+        incremental={incremental}
+        children={children}
+        refundWindowOpen={refundWindowOpen}
+        showRegistrationWelcome={showRegistrationWelcome}
+      />
       <Footer />
     </>
   )

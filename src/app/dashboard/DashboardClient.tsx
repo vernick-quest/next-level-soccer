@@ -18,11 +18,14 @@ export default function DashboardClient({
   incremental,
   children,
   refundWindowOpen,
+  showRegistrationWelcome = false,
 }: {
   initialCamps: DashboardCamp[]
   incremental: { children: DashboardIncrementalChild[]; weekRemaining: Record<string, number> } | null
   children: DashboardChildView[]
   refundWindowOpen: boolean
+  /** Set when arriving from successful camp registration (`/dashboard?registered=1`). */
+  showRegistrationWelcome?: boolean
 }) {
   const [camps, setCamps] = useState(initialCamps)
   const [message, setMessage] = useState<string | null>(null)
@@ -39,6 +42,20 @@ export default function DashboardClient({
   useEffect(() => {
     setActiveIndex((i) => (children.length === 0 ? 0 : Math.min(i, children.length - 1)))
   }, [children.length])
+
+  useEffect(() => {
+    if (!showRegistrationWelcome) return
+    setSuccess(
+      'Registration received! Your campers and weeks are listed below. Check your email for payment details (Zelle / Venmo).',
+    )
+    if (typeof window === 'undefined') return
+    const url = new URL(window.location.href)
+    if (url.searchParams.has('registered')) {
+      url.searchParams.delete('registered')
+      const qs = url.searchParams.toString()
+      window.history.replaceState({}, '', `${url.pathname}${qs ? `?${qs}` : ''}`)
+    }
+  }, [showRegistrationWelcome])
 
   const canSubmitIncremental = incremental?.children.some((c) => c.submissionPending) ?? false
   const showPaidFamilyBanner = !(incremental?.children ?? []).some((c) => c.submissionPending)

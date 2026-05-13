@@ -3,7 +3,6 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
-import { getPostLoginRedirectPath } from '@/app/login/actions'
 
 type Tab = 'password' | 'magic' | 'signup'
 
@@ -50,9 +49,8 @@ export default function ParentEmailAuthPanel({
       setError(err.message)
       return
     }
-    const path = await getPostLoginRedirectPath(safeNext)
-    router.push(path)
-    router.refresh()
+    // Full navigation so `/auth/post-login` runs with cookies present (Server Actions can miss the new session).
+    window.location.assign(`/auth/post-login?next=${encodeURIComponent(safeNext)}`)
   }
 
   async function sendMagicLink() {
