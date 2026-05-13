@@ -264,7 +264,9 @@ export async function submitFamilyRegistration(data: FamilyRegistrationInput): P
     throw registrationsErr instanceof Error ? registrationsErr : new Error(JSON.stringify(registrationsErr))
   }
 
-  const apiKey = process.env.RESEND_API_KEY
+  const apiKey =
+    typeof process.env.RESEND_API_KEY === 'string' ? process.env.RESEND_API_KEY.trim() : ''
+  /** Only gate that skips email: missing/blank `RESEND_API_KEY` on this server (e.g. prod without env, or dev server not restarted after editing `.env.local`). */
   if (apiKey) {
     const parentName = `${data.parentFirstName} ${data.parentLastName}`.trim()
     const newWeekCount = data.children.reduce((n, c) => n + c.campWeeks.length, 0)
@@ -319,7 +321,9 @@ export async function submitFamilyRegistration(data: FamilyRegistrationInput): P
       console.error('[submitFamilyRegistration] Resend send error:', sendErr)
     }
   } else {
-    console.warn('[submitFamilyRegistration] RESEND_API_KEY is not set; parent confirmation and ops receipt skipped.')
+    console.warn(
+      '[submitFamilyRegistration] RESEND_API_KEY is missing or blank after trim; parent confirmation and ops receipt skipped.',
+    )
   }
 
   return { success: true }
