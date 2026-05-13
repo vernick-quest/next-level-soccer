@@ -6,8 +6,9 @@ import { insertDenormalizedRegistrationRows } from '@/lib/denormalized-registrat
 import { validateCampWeekCapacityForSubmission } from '@/lib/home-camp-spots'
 import { buildEmailSubject } from '@/lib/email-template-interpolate'
 import { resolveEmailTemplateFields } from '@/lib/email-templates-resolve'
-import { REPLY_TO_EMAIL, SENDER_EMAIL } from '@/lib/resend-sender'
+import { REPLY_TO_EMAIL, REGISTRATION_RECEIPT_EMAIL, SENDER_EMAIL } from '@/lib/resend-sender'
 import { buildRegistrationReceivedEmailHtml } from '@/lib/transactional-parent-email-html'
+import { buildRegistrationOpsReceiptHtml } from '@/lib/registration-ops-receipt-html'
 import { createClient, createServiceRoleClient } from '@/lib/supabase/server'
 
 function throwSupabaseError(context: string, error: unknown): never {
@@ -268,7 +269,7 @@ export async function submitFamilyRegistration(data: FamilyRegistrationInput): P
     const parentName = `${data.parentFirstName} ${data.parentLastName}`.trim()
     const newWeekCount = data.children.reduce((n, c) => n + c.campWeeks.length, 0)
     const newAmountCents = newWeekCount * CAMP_PRICE_CENTS
-    const newLines = data.children
+    const newListItems = data.children
       .map((c) => {
         const name = `${c.playerFirstName} ${c.playerLastName}`.trim()
         const weeks = c.campWeeks.join(', ')
@@ -278,11 +279,35 @@ export async function submitFamilyRegistration(data: FamilyRegistrationInput): P
     const amountDollars = `$${(newAmountCents / 100).toLocaleString('en-US')}`
     const tpl = await resolveEmailTemplateFields('registration_received')
     const html = buildRegistrationReceivedEmailHtml(
-      { parentFullName: parentName, newWeeksListHtml: newLines, amountDollars },
+      { parentFullName: parentName, newWeeksListHtml: newListItems, amountDollars },
       tpl,
     )
     console.log('Email payload generated', { type: 'initial_registration', newAmountCents })
     const resend = new Resend(apiKey)
+
+    const receiptHtml = buildRegistrationOpsReceiptHtml({
+      kind: 'new_registration',
+      submissionId: submission.id as string,
+      authUserId: user.id,
+      parentFullName: parentName,
+      parentEmail: data.parentEmail,
+      parentPhone: data.parentPhone,
+      newWeekListItemHtml: newListItems,
+      amountDollars,
+      weekCount: newWeekCount,
+    })
+    const receiptSubject = `[NLSF receipt] ${parentName} · ${newWeekCount} week(s) · ${amountDollars}`
+    const { error: receiptErr } = await resend.emails.send({
+      from: SENDER_EMAIL,
+      replyTo: REPLY_TO_EMAIL,
+      to: REGISTRATION_RECEIPT_EMAIL,
+      subject: receiptSubject,
+      html: receiptHtml,
+    })
+    if (receiptErr) {
+      console.error('[submitFamilyRegistration] Ops receipt Resend error:', receiptErr)
+    }
+
     const { error: sendErr } = await resend.emails.send({
       from: SENDER_EMAIL,
       replyTo: REPLY_TO_EMAIL,
@@ -294,7 +319,7 @@ export async function submitFamilyRegistration(data: FamilyRegistrationInput): P
       console.error('[submitFamilyRegistration] Resend send error:', sendErr)
     }
   } else {
-    console.warn('[submitFamilyRegistration] RESEND_API_KEY is not set; confirmation email skipped.')
+    console.warn('[submitFamilyRegistration] RESEND_API_KEY is not set; parent confirmation and ops receipt skipped.')
   }
 
   return { success: true }

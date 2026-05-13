@@ -4,8 +4,9 @@ import { Resend } from 'resend'
 import { buildEmailSubject } from '@/lib/email-template-interpolate'
 import { resolveEmailTemplateFields } from '@/lib/email-templates-resolve'
 import { insertDenormalizedRegistrationRows } from '@/lib/denormalized-registrations-insert'
-import { REPLY_TO_EMAIL, SENDER_EMAIL } from '@/lib/resend-sender'
+import { REPLY_TO_EMAIL, REGISTRATION_RECEIPT_EMAIL, SENDER_EMAIL } from '@/lib/resend-sender'
 import { buildAdditionalWeeksEmailHtml } from '@/lib/transactional-parent-email-html'
+import { buildRegistrationOpsReceiptHtml } from '@/lib/registration-ops-receipt-html'
 import { CAMP_WEEK_PRICE_CENTS as CAMP_PRICE_CENTS } from '@/lib/camp-pricing'
 import { CAMP_SESSIONS, campWeekSortIndex } from '@/lib/camp-weeks'
 import { createClient } from '@/lib/supabase/server'
@@ -1128,40 +1129,71 @@ export async function submitAdditionalWeeks(input: {
   const newAmountCents = addedWeekCount * CAMP_PRICE_CENTS
 
   const apiKey = process.env.RESEND_API_KEY
-  if (apiKey && parentEmail) {
-    const confirmedBlock =
-      confirmedLines.length > 0
-        ? `<ul>${confirmedLines.join('')}</ul>`
-        : '<p style="color:#64748b;font-size:14px;">None yet.</p>'
-    const amountDollars = `$${(newAmountCents / 100).toLocaleString('en-US')}`
-    const tpl = await resolveEmailTemplateFields('additional_weeks_payment_due')
-    const html = buildAdditionalWeeksEmailHtml(
-      {
-        parentFullName: parentName,
-        confirmedBlockHtml: confirmedBlock,
-        newWeeksListHtml: newLines.join(''),
-        amountDollars,
-      },
-      tpl,
-    )
-    console.log('Email payload generated', {
-      type: 'incremental_weeks',
-      newAmountCents,
-      addedWeekCount,
-    })
+  if (apiKey) {
     const resend = new Resend(apiKey)
-    const { error: sendErr } = await resend.emails.send({
-      from: SENDER_EMAIL,
-      replyTo: REPLY_TO_EMAIL,
-      to: parentEmail,
-      subject: buildEmailSubject(tpl.subjectTemplate, { parentFullName: parentName, amountDollars }),
-      html,
-    })
-    if (sendErr) {
-      console.error('submitAdditionalWeeks Resend:', sendErr)
+    const sub0 = resolved[0]?.sub
+    if (sub0) {
+      const receiptList = newLines.join('')
+      const receiptHtml = buildRegistrationOpsReceiptHtml({
+        kind: 'additional_weeks',
+        submissionId: sub0.id as string,
+        authUserId: user.id,
+        parentFullName: parentName,
+        parentEmail: (sub0.parent_email ?? parentEmail ?? '').trim(),
+        parentPhone: (sub0.parent_phone ?? '').trim(),
+        newWeekListItemHtml: receiptList,
+        amountDollars: `$${(newAmountCents / 100).toLocaleString('en-US')}`,
+        weekCount: addedWeekCount,
+      })
+      const receiptSubject = `[NLSF receipt] Additional weeks · ${parentName} · ${addedWeekCount} week(s) · $${(newAmountCents / 100).toLocaleString('en-US')}`
+      const { error: receiptErr } = await resend.emails.send({
+        from: SENDER_EMAIL,
+        replyTo: REPLY_TO_EMAIL,
+        to: REGISTRATION_RECEIPT_EMAIL,
+        subject: receiptSubject,
+        html: receiptHtml,
+      })
+      if (receiptErr) {
+        console.error('submitAdditionalWeeks ops receipt Resend:', receiptErr)
+      }
+    }
+
+    if (parentEmail) {
+      const confirmedBlock =
+        confirmedLines.length > 0
+          ? `<ul>${confirmedLines.join('')}</ul>`
+          : '<p style="color:#64748b;font-size:14px;">None yet.</p>'
+      const amountDollars = `$${(newAmountCents / 100).toLocaleString('en-US')}`
+      const tpl = await resolveEmailTemplateFields('additional_weeks_payment_due')
+      const html = buildAdditionalWeeksEmailHtml(
+        {
+          parentFullName: parentName,
+          confirmedBlockHtml: confirmedBlock,
+          newWeeksListHtml: newLines.join(''),
+          amountDollars,
+        },
+        tpl,
+      )
+      console.log('Email payload generated', {
+        type: 'incremental_weeks',
+        newAmountCents,
+        addedWeekCount,
+      })
+      const { error: sendErr } = await resend.emails.send({
+        from: SENDER_EMAIL,
+        replyTo: REPLY_TO_EMAIL,
+        to: parentEmail,
+        subject: buildEmailSubject(tpl.subjectTemplate, { parentFullName: parentName, amountDollars }),
+        html,
+      })
+      if (sendErr) {
+        console.error('submitAdditionalWeeks Resend:', sendErr)
+      }
+    } else {
+      console.warn('submitAdditionalWeeks: parent email missing; parent confirmation skipped (ops receipt still attempted).')
     }
   } else {
-    console.warn('submitAdditionalWeeks: RESEND_API_KEY or parent email missing; skip confirmation email.')
+    console.warn('submitAdditionalWeeks: RESEND_API_KEY missing; skip confirmation and ops receipt.')
   }
 
   return { success: true }
