@@ -99,7 +99,8 @@ export default function CoachPortal({
   )
 
   const pathname = usePathname()
-  const playersDirectoryActive = pathname.startsWith('/coach/players')
+  const playersDirectoryActive = pathname === '/coach/players'
+  const manualRegistrationActive = pathname.startsWith('/coach/players/new')
 
   useEffect(() => {
     setEmailFieldsDraft({ ...emailBundle[emailTemplateKey].fields })
@@ -484,7 +485,15 @@ export default function CoachPortal({
               playersDirectoryActive ? 'bg-[#062744] text-white' : 'text-[#213c57] hover:bg-[#f7f2e8]'
             }`}
           >
-            Players
+            Player directory
+          </Link>
+          <Link
+            href="/coach/players/new"
+            className={`flex-1 sm:flex-none px-4 py-2.5 rounded-xl text-sm font-bold transition-colors text-center inline-flex items-center justify-center ${
+              manualRegistrationActive ? 'bg-[#062744] text-white' : 'text-[#213c57] hover:bg-[#f7f2e8]'
+            }`}
+          >
+            Manual registration
           </Link>
           <button
             type="button"

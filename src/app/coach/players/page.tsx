@@ -31,7 +31,7 @@ export default async function CoachPlayerDirectoryPage() {
     return (
       <div className="min-h-screen bg-[#f7f2e8] py-10 px-4">
         <div className="max-w-5xl mx-auto">
-          <CoachAreaHeader title="Player directory" subtitle="Could not load players from the database." />
+          <CoachAreaHeader title="Player directory" subtitle="Could not load players from the database." nav="directory" />
           <div className="bg-white border border-[#e8d8ce] rounded-2xl p-8 text-center text-slate-700">
             Confirm Supabase is reachable and the service role key is configured for staff tools.
           </div>
@@ -46,6 +46,7 @@ export default async function CoachPlayerDirectoryPage() {
         <CoachAreaHeader
           title="Player directory"
           subtitle="Every player on file from family registrations — open a profile for full scouting notes, contacts, and activity."
+          nav="directory"
         />
 
         {players.length === 0 ? (

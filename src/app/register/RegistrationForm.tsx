@@ -19,46 +19,22 @@ import {
   processChildPhotoForUpload,
 } from '@/lib/child-photo-face-crop'
 import { CAMP_SESSIONS } from '@/lib/camp-weeks'
+import {
+  REGISTRATION_EXPERIENCE_LEVELS,
+  REGISTRATION_GENDER_OPTIONS,
+  REGISTRATION_GRADE_OPTIONS,
+  REGISTRATION_PRONOUNS_OPTIONS,
+  REGISTRATION_SHIRT_SIZES,
+} from '@/lib/registration-field-options'
 import { SOCCER_CLUB_DATALIST_ID, SOCCER_CLUB_SUGGESTIONS } from '@/lib/soccer-club-suggestions'
 import { formatUsPhoneAsYouType, isCompleteUsPhone } from '@/lib/phone-mask'
 import { SOCCER_POSITION_CHOICES, soccerPositionLabel } from '@/lib/soccer-positions'
 
-const PRONOUNS_OPTIONS = [
-  { value: 'He/Him', label: 'He/Him' },
-  { value: 'She/Her', label: 'She/Her' },
-  { value: 'They/Them', label: 'They/Them' },
-]
-
-const GENDER_OPTIONS = [
-  { value: 'boy', label: 'Boy' },
-  { value: 'girl', label: 'Girl' },
-]
-
-const EXPERIENCE_LEVELS = [
-  'SFYS',
-  'School Team',
-  'Copper',
-  'Bronze',
-  'Silver',
-  'Gold',
-  'Premier',
-  'NPL',
-  'ECNL-RL',
-  'ECNL',
-  'MLS-Next',
-  'other',
-] as const
-
-const GRADE_OPTIONS: { value: string; label: string }[] = [
-  { value: 'K', label: 'Kindergarten' },
-  ...Array.from({ length: 12 }, (_, i) => {
-    const n = i + 1
-    const suffix =
-      n === 1 ? 'st' : n === 2 ? 'nd' : n === 3 ? 'rd' : 'th'
-    return { value: String(n), label: `${n}${suffix} grade` }
-  }),
-]
-const SHIRT_SIZES = ['YS', 'YM', 'YL', 'AS', 'AM', 'AL', 'AXL']
+const PRONOUNS_OPTIONS = [...REGISTRATION_PRONOUNS_OPTIONS]
+const GENDER_OPTIONS = [...REGISTRATION_GENDER_OPTIONS]
+const EXPERIENCE_LEVELS = [...REGISTRATION_EXPERIENCE_LEVELS]
+const GRADE_OPTIONS = REGISTRATION_GRADE_OPTIONS
+const SHIRT_SIZES = [...REGISTRATION_SHIRT_SIZES]
 
 const CAMP_PRICE = 350
 

@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState, useTransition } from 'react'
+import { useEffect, useMemo, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { CAMP_SESSIONS } from '@/lib/camp-weeks'
 import { campNameFromWeekLabel } from '@/lib/camp-display'
@@ -9,6 +9,11 @@ import { staffAdjustChildCampWeeks } from './coach-registration-actions'
 const KNOWN_WEEKS = new Set<string>(CAMP_SESSIONS)
 
 export type WeekRow = { registration_id: string; camp_session: string; status: string }
+
+const btnBlue =
+  'text-sm font-bold bg-[#062744] text-white px-5 py-2.5 rounded-full hover:bg-[#041f36] disabled:opacity-50'
+const btnOrange =
+  'text-sm font-bold bg-[#f05a28] text-white px-5 py-2.5 rounded-full hover:bg-[#d94f22] disabled:opacity-50'
 
 export default function CoachPlayerCampWeeksPanel({ childId, rows }: { childId: string; rows: WeekRow[] }) {
   const router = useRouter()
@@ -20,12 +25,30 @@ export default function CoachPlayerCampWeeksPanel({ childId, rows }: { childId: 
   const [removeIds, setRemoveIds] = useState<string[]>([])
   const [moveToById, setMoveToById] = useState<Record<string, string>>({})
 
+  useEffect(() => {
+    setAddPick('')
+    setRemoveIds([])
+    setMoveToById({})
+    setMessage(null)
+    setError(null)
+  }, [rows])
+
   const currentSessions = useMemo(() => new Set(rows.map((r) => r.camp_session)), [rows])
 
   const addableWeeks = useMemo(
     () => CAMP_SESSIONS.filter((w) => !currentSessions.has(w)),
     [currentSessions],
   )
+
+  const dirty = useMemo(() => {
+    if (addPick.trim()) return true
+    if (removeIds.length > 0) return true
+    for (const r of rows) {
+      const pick = (moveToById[r.registration_id] ?? '').trim()
+      if (pick && pick !== r.camp_session) return true
+    }
+    return false
+  }, [addPick, removeIds, moveToById, rows])
 
   function toggleRemove(id: string) {
     setRemoveIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]))
@@ -167,7 +190,7 @@ export default function CoachPlayerCampWeeksPanel({ childId, rows }: { childId: 
           type="button"
           disabled={pending}
           onClick={() => submitBatch()}
-          className="text-sm font-bold bg-[#f05a28] text-white px-5 py-2.5 rounded-full hover:bg-[#d94f22] disabled:opacity-50"
+          className={dirty ? btnOrange : btnBlue}
         >
           {pending ? 'Saving…' : 'Apply changes & email parent'}
         </button>

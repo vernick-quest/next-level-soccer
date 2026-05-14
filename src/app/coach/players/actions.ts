@@ -66,6 +66,10 @@ export type CoachDirectoryPlayerProfile = {
   registeredCampSessions: string[]
   /** Per-row registration weeks for staff week management (pending vs confirmed). */
   registeredWeekDetails: { registration_id: string; camp_session: string; status: string }[]
+  /** Raw DB fields for staff club / playing level editor */
+  staff_edit_soccer_club: string
+  staff_edit_experience_level: string
+  staff_edit_experience_other: string
 }
 
 function trimName(s: string | null | undefined) {
@@ -341,6 +345,9 @@ export async function getPlayerDirectoryProfileForStaff(
     reportsByWeekKey,
     registeredCampSessions,
     registeredWeekDetails,
+    staff_edit_soccer_club: trimName(child.soccer_club as string | null) ?? '',
+    staff_edit_experience_level: expLevel,
+    staff_edit_experience_other: expOther,
   }
 
   return { profile, error: null }

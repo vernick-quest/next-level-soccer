@@ -28,7 +28,8 @@ export default async function CoachManualRegistrationPage() {
       <div className="max-w-4xl mx-auto">
         <CoachAreaHeader
           title="Manual registration"
-          subtitle="Use when a parent hits technical issues. Requires their existing account email and SUPABASE_SERVICE_ROLE_KEY on the server."
+          subtitle="Same required fields as public registration. New parents receive an email invite to verify their address and set a password."
+          nav="manual"
         />
         <CoachManualRegistrationForm />
       </div>

@@ -1,4 +1,3 @@
-import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { getStaffAdminUser } from '@/lib/admin'
@@ -10,6 +9,7 @@ import { CoachAreaHeader } from '../CoachAreaHeader'
 import { getPlayerDirectoryProfileForStaff } from '../actions'
 import ReportSkillsGrid from '@/app/dashboard/ReportSkillsGrid'
 import CoachPlayerCampWeeksPanel from '../CoachPlayerCampWeeksPanel'
+import CoachPlayerProfileClubLevelPanel from '../CoachPlayerProfileClubLevelPanel'
 
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -43,8 +43,16 @@ function formatActivityWhen(iso: string) {
   })
 }
 
-export default async function CoachPlayerProfilePage({ params }: { params: Promise<{ id: string }> }) {
+export default async function CoachPlayerProfilePage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>
+  searchParams?: Promise<{ invited?: string }>
+}) {
   const { id } = await params
+  const sp = searchParams ? await searchParams : {}
+  const invited = sp?.invited === '1'
 
   const staffUser = await getStaffAdminUser()
   if (!staffUser?.email) {
@@ -80,7 +88,19 @@ export default async function CoachPlayerProfilePage({ params }: { params: Promi
   return (
     <div className="min-h-screen bg-[#f7f2e8] py-10 px-4">
       <div className="max-w-4xl mx-auto space-y-6">
-        <CoachAreaHeader title="Scouting profile" subtitle="Internal coach view — roster, contacts, and history." />
+        <CoachAreaHeader
+          title={fullName}
+          subtitle="Scouting profile — internal coach view."
+          nav="profile"
+          profileCrumbLabel={fullName}
+        />
+
+        {invited ? (
+          <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
+            We sent this parent an account invite. They should open the email, verify their address, and create a
+            password before using the parent dashboard.
+          </div>
+        ) : null}
 
         <div className="relative overflow-hidden rounded-2xl border border-[#e8d8ce] bg-white shadow-md">
           <div className="absolute inset-x-0 top-0 h-2 bg-gradient-to-r from-[#062744] via-[#f05a28] to-[#062744]" aria-hidden />
@@ -96,16 +116,8 @@ export default async function CoachPlayerProfilePage({ params }: { params: Promi
                     <dd className="text-[#062744] font-semibold">{formatDob(profile.player_dob)}</dd>
                   </div>
                   <div>
-                    <dt className="text-xs font-bold uppercase text-slate-500">Current club</dt>
-                    <dd className="text-[#062744] font-semibold">{profile.soccer_club || '—'}</dd>
-                  </div>
-                  <div>
                     <dt className="text-xs font-bold uppercase text-slate-500">Pronouns</dt>
                     <dd className="text-[#062744] font-semibold">{profile.player_pronouns?.trim() || '—'}</dd>
-                  </div>
-                  <div>
-                    <dt className="text-xs font-bold uppercase text-slate-500">Playing level</dt>
-                    <dd className="text-[#062744] font-semibold">{profile.playing_level?.trim() || '—'}</dd>
                   </div>
                   <div>
                     <dt className="text-xs font-bold uppercase text-slate-500">School (fall)</dt>
@@ -134,6 +146,13 @@ export default async function CoachPlayerProfilePage({ params }: { params: Promi
             </div>
           </div>
         </div>
+
+        <CoachPlayerProfileClubLevelPanel
+          childId={profile.id}
+          initialSoccerClub={profile.staff_edit_soccer_club}
+          initialExperienceLevel={profile.staff_edit_experience_level}
+          initialExperienceOther={profile.staff_edit_experience_other}
+        />
 
         <section className="rounded-2xl border border-[#e8d8ce] bg-white p-6 sm:p-8 shadow-sm">
           <h3 className="text-lg font-extrabold text-[#062744] border-b border-[#f0e2d9] pb-2 mb-4">
@@ -234,14 +253,6 @@ export default async function CoachPlayerProfilePage({ params }: { params: Promi
           )}
         </section>
 
-        <div className="flex flex-wrap gap-3">
-          <Link
-            href="/coach/players"
-            className="inline-flex items-center font-bold text-[#062744] hover:text-[#f05a28] text-sm"
-          >
-            ← Back to directory
-          </Link>
-        </div>
       </div>
     </div>
   )
