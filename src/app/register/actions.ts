@@ -9,11 +9,11 @@ import { resolveEmailTemplateFields } from '@/lib/email-templates-resolve'
 import {
   getResendApiKeyOrNull,
   REPLY_TO_EMAIL,
-  REGISTRATION_RECEIPT_EMAIL,
   SENDER_EMAIL,
 } from '@/lib/resend-sender'
 import { buildRegistrationReceivedEmailHtml } from '@/lib/transactional-parent-email-html'
 import { buildRegistrationOpsReceiptHtml } from '@/lib/registration-ops-receipt-html'
+import { nlsfCampWeekDetailPhrase, sendNlsfTransactionReceiptEmail } from '@/lib/nlsf-transaction-receipt-email'
 import { createClient, createServiceRoleClient } from '@/lib/supabase/server'
 import { buildRegistrationsRows } from '@/lib/family-registration-rows'
 
@@ -214,17 +214,22 @@ export async function submitFamilyRegistration(data: FamilyRegistrationInput): P
       amountDollars,
       weekCount: newWeekCount,
     })
-    const receiptSubject = `[NLSF receipt] ${parentName} · ${newWeekCount} week(s) · ${amountDollars}`
-    const { error: receiptErr } = await resend.emails.send({
-      from: SENDER_EMAIL,
-      replyTo: REPLY_TO_EMAIL,
-      to: REGISTRATION_RECEIPT_EMAIL,
-      subject: receiptSubject,
-      html: receiptHtml,
+    const txLines = data.children.flatMap((c) => {
+      const childName = `${c.playerFirstName} ${c.playerLastName}`.trim()
+      return c.campWeeks.map((w) => ({
+        parentDisplayName: parentName || 'Parent',
+        childDisplayName: childName || 'Child',
+        actionLabel: 'Registered',
+        campWeekTail: nlsfCampWeekDetailPhrase(w),
+      }))
     })
-    if (receiptErr) {
-      console.error('[submitFamilyRegistration] Ops receipt Resend error:', receiptErr)
-    }
+    await sendNlsfTransactionReceiptEmail({
+      logContext: 'submitFamilyRegistration',
+      subjectParentName: parentName || 'Parent',
+      subjectActionType: 'REGISTERED',
+      lines: txLines,
+      htmlAppendix: `<hr style="border:none;border-top:1px solid #e2e8f0;margin:1rem 0;" />${receiptHtml}`,
+    })
 
     const { error: sendErr } = await resend.emails.send({
       from: SENDER_EMAIL,

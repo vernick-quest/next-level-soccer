@@ -9,9 +9,10 @@ import { CAMP_SESSIONS, campWeekSortIndex } from '@/lib/camp-weeks'
 import { sendCoachOverrideEmail } from '@/lib/coach-override-resend'
 import { escapeHtml } from '@/lib/html-escape'
 import { buildRegistrationOpsReceiptHtml } from '@/lib/registration-ops-receipt-html'
-import { REGISTRATION_RECEIPT_EMAIL } from '@/lib/resend-sender'
+import { nlsfCampWeekDetailPhrase, sendNlsfTransactionReceiptEmail, type NlsfTransactionLine } from '@/lib/nlsf-transaction-receipt-email'
 import { buildRegistrationReceivedEmailHtml } from '@/lib/transactional-parent-email-html'
-import { lookupAuthUserIdByEmail } from '@/lib/supabase/auth-admin-client'
+import { ensureParentAuthUserForManualRegistration } from '@/lib/supabase/auth-admin-client'
+import { isCompleteUsPhone } from '@/lib/phone-mask'
 import { createServiceRoleClient } from '@/lib/supabase/service'
 import { buildRegistrationsRows } from '@/lib/family-registration-rows'
 import type { FamilyRegistrationInput } from '@/lib/family-registration-input-types'
@@ -176,6 +177,7 @@ function registrationInsertRowFromChild(child: RegChildRow, sub: SubRow, userId:
 async function sendStaffRegistrationEmails(args: {
   parentEmail: string
   parentName: string
+  children: FamilyRegistrationInput['children']
   newListItems: string
   amountDollars: string
   newWeekCount: number
@@ -216,19 +218,26 @@ async function sendStaffRegistrationEmails(args: {
     amountDollars: args.amountDollars,
     weekCount: args.newWeekCount,
   })
-  const receiptSubject = `[NLSF staff] Manual registration · ${args.parentName} · ${args.newWeekCount} week(s) · ${args.amountDollars}`
-  const opsResult = await sendCoachOverrideEmail({
-    to: REGISTRATION_RECEIPT_EMAIL,
-    subject: receiptSubject,
-    html: receiptHtml,
+  const txLines = args.children.flatMap((c) => {
+    const childName = `${c.playerFirstName} ${c.playerLastName}`.trim()
+    return c.campWeeks.map((w) => ({
+      parentDisplayName: args.parentName || 'Parent',
+      childDisplayName: childName || 'Child',
+      actionLabel: 'Registered',
+      campWeekTail: nlsfCampWeekDetailPhrase(w),
+    }))
   })
-  if (!opsResult.ok) {
-    console.error('[staffManualFamilyRegistration] ops receipt:', opsResult.message)
-  }
+  await sendNlsfTransactionReceiptEmail({
+    logContext: 'staffManualFamilyRegistration',
+    subjectParentName: args.parentName || 'Parent',
+    subjectActionType: 'MANUAL_REGISTERED',
+    lines: txLines,
+    htmlAppendix: `<p style="font-size:0.875rem;color:#64748b;margin-bottom:0.75rem;">Staff manual registration (on behalf of parent).</p><hr style="border:none;border-top:1px solid #e2e8f0;margin:1rem 0;" />${receiptHtml}`,
+  })
 }
 
 export type StaffManualRegistrationResult =
-  | { success: true; submissionId: string; firstChildId: string }
+  | { success: true; submissionId: string; firstChildId: string; parentInvited: boolean }
   | { success: false; error: string }
 
 export async function staffManualFamilyRegistration(
@@ -245,6 +254,9 @@ export async function staffManualFamilyRegistration(
   if (!data.children.length) {
     return { success: false, error: 'Please add at least one child.' }
   }
+  if (!isCompleteUsPhone(data.parentPhone)) {
+    return { success: false, error: 'Parent phone must be a complete 10-digit US number.' }
+  }
   for (const child of data.children) {
     if (!child.campWeeks.length) {
       return { success: false, error: 'Each child must have at least one camp week selected.' }
@@ -257,6 +269,21 @@ export async function staffManualFamilyRegistration(
     }
     if (!child.playerSoccerClub.trim()) {
       return { success: false, error: 'Each player needs a club or program.' }
+    }
+    if (!child.gradeFall.trim()) {
+      return { success: false, error: 'Each player must have a grade for fall.' }
+    }
+    if (!child.schoolFall.trim()) {
+      return { success: false, error: 'Each player must have a school for fall.' }
+    }
+    if (!child.shirtSize.trim()) {
+      return { success: false, error: 'Each player must have a shirt size.' }
+    }
+    if (!child.emergencyContactName.trim() || !child.emergencyContactPhone.trim()) {
+      return { success: false, error: 'Each player needs emergency contact name and phone.' }
+    }
+    if (!isCompleteUsPhone(child.emergencyContactPhone)) {
+      return { success: false, error: 'Emergency contact phone must be a complete 10-digit US number for each player.' }
     }
     for (const w of child.campWeeks) {
       if (!KNOWN_WEEKS.has(w)) {
@@ -272,14 +299,12 @@ export async function staffManualFamilyRegistration(
     return { success: false, error: 'Server is missing SUPABASE_SERVICE_ROLE_KEY.' }
   }
 
-  const authUserId = await lookupAuthUserIdByEmail(data.parentEmail)
-  if (!authUserId) {
-    return {
-      success: false,
-      error:
-        'No Supabase account exists for this parent email. Ask the parent to create a log-in first (same email they will use on the site), then try again.',
-    }
+  const auth = await ensureParentAuthUserForManualRegistration(data.parentEmail)
+  if (!auth.ok) {
+    return { success: false, error: auth.message }
   }
+  const authUserId = auth.userId
+  const parentInvited = auth.invited
 
   const totalWeeks = data.children.reduce((n, c) => n + c.campWeeks.length, 0)
   const totalAmountCents = totalWeeks * CAMP_PRICE_CENTS
@@ -367,6 +392,7 @@ export async function staffManualFamilyRegistration(
   await sendStaffRegistrationEmails({
     parentEmail: data.parentEmail.trim(),
     parentName,
+    children: data.children,
     newListItems,
     amountDollars,
     newWeekCount,
@@ -374,7 +400,7 @@ export async function staffManualFamilyRegistration(
     authUserId,
   })
 
-  return { success: true, submissionId, firstChildId }
+  return { success: true, submissionId, firstChildId, parentInvited }
 }
 
 export type StaffCampWeekAdjustmentInput = {
@@ -472,8 +498,12 @@ export async function staffAdjustChildCampWeeks(
   const fn = (rc.player_first_name ?? '').trim()
   const ln = (rc.player_last_name ?? '').trim()
   const submissionId = rc.submission_id as string
+  const parentNameForReceipt =
+    `${sub.parent_first_name ?? ''} ${sub.parent_last_name ?? ''}`.trim() || 'Parent'
+  const childDisplayForReceipt = `${fn} ${ln}`.trim() || 'Child'
 
   try {
+    const transactionReceiptLines: NlsfTransactionLine[] = []
     async function loadRegsForPlayer() {
       const { data, error } = await db
         .from('registrations')
@@ -509,6 +539,12 @@ export async function staffAdjustChildCampWeeks(
       console.error('[staffAdjustChildCampWeeks] delete', delErr)
       return { success: false, error: 'Could not remove a camp week row.' }
     }
+    transactionReceiptLines.push({
+      parentDisplayName: parentNameForReceipt,
+      childDisplayName: childDisplayForReceipt,
+      actionLabel: 'Canceled',
+      campWeekTail: nlsfCampWeekDetailPhrase(((row.camp_session as string) ?? '').trim()),
+    })
   }
 
   existingRegs = await loadRegsForPlayer()
@@ -535,6 +571,12 @@ export async function staffAdjustChildCampWeeks(
       console.error('[staffAdjustChildCampWeeks] move', upErr)
       return { success: false, error: 'Could not move a camp week.' }
     }
+    transactionReceiptLines.push({
+      parentDisplayName: parentNameForReceipt,
+      childDisplayName: childDisplayForReceipt,
+      actionLabel: 'Moved',
+      campWeekTail: `from ${nlsfCampWeekDetailPhrase(fromW)} to ${nlsfCampWeekDetailPhrase(mv.toWeek)}`,
+    })
     existingSessions.delete(fromW)
     existingSessions.add(mv.toWeek)
   }
@@ -577,10 +619,27 @@ export async function staffAdjustChildCampWeeks(
       console.error('[staffAdjustChildCampWeeks] insert', e)
       return { success: false, error: 'Could not add camp week rows.' }
     }
+    for (const week of weeksActuallyAdded) {
+      transactionReceiptLines.push({
+        parentDisplayName: parentNameForReceipt,
+        childDisplayName: childDisplayForReceipt,
+        actionLabel: 'Added',
+        campWeekTail: nlsfCampWeekDetailPhrase(week),
+      })
+    }
   }
 
   await syncChildCampWeeksFromRegistrations(db, submissionId, fn, ln, childId)
   await recomputeSubmissionTotalCents(db, submissionId)
+
+  if (transactionReceiptLines.length) {
+    await sendNlsfTransactionReceiptEmail({
+      logContext: 'staffAdjustChildCampWeeks',
+      subjectParentName: parentNameForReceipt,
+      subjectActionType: 'STAFF_CAMP_WEEK_UPDATE',
+      lines: transactionReceiptLines,
+    })
+  }
 
   const parentEmail = (sub.parent_email ?? '').trim()
   const parentName = `${sub.parent_first_name ?? ''} ${sub.parent_last_name ?? ''}`.trim()
@@ -619,4 +678,94 @@ export async function staffAdjustChildCampWeeks(
     const msg = e instanceof Error ? e.message : 'Unexpected error while updating camp weeks.'
     return { success: false, error: msg }
   }
+}
+
+export async function staffUpdateChildClubAndLevel(input: {
+  childId: string
+  soccerClub: string
+  experienceLevel: string
+  experienceOther: string
+}): Promise<{ success: true } | { success: false; error: string }> {
+  const staff = await getStaffAdminUser()
+  if (!staff) {
+    return { success: false, error: 'You must be signed in with Google as staff.' }
+  }
+
+  const childId = (input.childId ?? '').trim()
+  const club = (input.soccerClub ?? '').trim()
+  const level = (input.experienceLevel ?? '').trim()
+  const other = (input.experienceOther ?? '').trim()
+  if (!childId) return { success: false, error: 'Missing player.' }
+  if (!club) return { success: false, error: 'Club is required.' }
+  if (!level) return { success: false, error: 'Playing level is required.' }
+  if (level === 'other' && !other) {
+    return { success: false, error: 'Describe the playing level when you select Other.' }
+  }
+
+  let db: ReturnType<typeof createServiceRoleClient>
+  try {
+    db = createServiceRoleClient()
+  } catch {
+    return { success: false, error: 'Server is missing SUPABASE_SERVICE_ROLE_KEY.' }
+  }
+
+  const { data: child, error: chErr } = await db
+    .from('registration_children')
+    .select('id, submission_id, player_first_name, player_last_name')
+    .eq('id', childId)
+    .maybeSingle()
+
+  if (chErr || !child) {
+    return { success: false, error: 'Player not found.' }
+  }
+
+  const fn = (child.player_first_name ?? '').trim()
+  const ln = (child.player_last_name ?? '').trim()
+  const submissionId = child.submission_id as string
+
+  const { error: upChildErr } = await db
+    .from('registration_children')
+    .update({
+      soccer_club: club,
+      player_experience_level: level,
+      player_experience_other: level === 'other' ? other : null,
+    })
+    .eq('id', childId)
+
+  if (upChildErr) {
+    console.error('[staffUpdateChildClubAndLevel] child update', upChildErr)
+    return { success: false, error: 'Could not update player record.' }
+  }
+
+  const playingLevelForRegs = level === 'other' ? null : level
+
+  const { data: regsAll, error: regErr } = await db
+    .from('registrations')
+    .select('id, player_first_name, player_last_name')
+    .eq('registration_submission_id', submissionId)
+
+  if (regErr) {
+    console.error('[staffUpdateChildClubAndLevel] regs list', regErr)
+    return { success: true }
+  }
+
+  const matchingIds = (regsAll ?? [])
+    .filter(
+      (r) =>
+        ((r.player_first_name as string | null) ?? '').trim() === fn &&
+        ((r.player_last_name as string | null) ?? '').trim() === ln,
+    )
+    .map((r) => r.id as string)
+
+  if (matchingIds.length) {
+    const { error: upRegErr } = await db
+      .from('registrations')
+      .update({ soccer_club: club, playing_level: playingLevelForRegs })
+      .in('id', matchingIds)
+    if (upRegErr) {
+      console.error('[staffUpdateChildClubAndLevel] regs update', upRegErr)
+    }
+  }
+
+  return { success: true }
 }

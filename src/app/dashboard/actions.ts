@@ -7,11 +7,11 @@ import { insertDenormalizedRegistrationRows } from '@/lib/denormalized-registrat
 import {
   getResendApiKeyOrNull,
   REPLY_TO_EMAIL,
-  REGISTRATION_RECEIPT_EMAIL,
   SENDER_EMAIL,
 } from '@/lib/resend-sender'
 import { buildAdditionalWeeksEmailHtml } from '@/lib/transactional-parent-email-html'
 import { buildRegistrationOpsReceiptHtml } from '@/lib/registration-ops-receipt-html'
+import { nlsfCampWeekDetailPhrase, sendNlsfTransactionReceiptEmail } from '@/lib/nlsf-transaction-receipt-email'
 import { CAMP_WEEK_PRICE_CENTS as CAMP_PRICE_CENTS } from '@/lib/camp-pricing'
 import { CAMP_SESSIONS, campWeekSortIndex } from '@/lib/camp-weeks'
 import { createClient } from '@/lib/supabase/server'
@@ -716,6 +716,15 @@ export async function removePendingCampRegistration(input: {
   const pfn = (row.player_first_name ?? '').trim()
   const pln = (row.player_last_name ?? '').trim()
 
+  const { data: subParentRow } = await supabase
+    .from('registration_submissions')
+    .select('parent_first_name, parent_last_name')
+    .eq('id', sid as string)
+    .maybeSingle()
+  const parentDisplayForReceipt =
+    `${subParentRow?.parent_first_name ?? ''} ${subParentRow?.parent_last_name ?? ''}`.trim() || 'Parent'
+  const childDisplayForReceipt = `${pfn} ${pln}`.trim() || 'Child'
+
   try {
     const service = createServiceRoleClient()
     const { error: delErr } = await service.from('registrations').delete().eq('id', input.registrationId)
@@ -753,6 +762,19 @@ export async function removePendingCampRegistration(input: {
         if (upSub) console.error('removePendingCampRegistration sync submission total:', upSub)
       }
     }
+    await sendNlsfTransactionReceiptEmail({
+      logContext: 'removePendingCampRegistration',
+      subjectParentName: parentDisplayForReceipt,
+      subjectActionType: 'CANCELED_CAMP_WEEK',
+      lines: [
+        {
+          parentDisplayName: parentDisplayForReceipt,
+          childDisplayName: childDisplayForReceipt,
+          actionLabel: 'Canceled',
+          campWeekTail: nlsfCampWeekDetailPhrase(weekRemoved),
+        },
+      ],
+    })
     return { success: true }
   } catch {
     const { error: delErr, data: deleted } = await supabase
@@ -769,6 +791,19 @@ export async function removePendingCampRegistration(input: {
           'Could not cancel registration. Add SUPABASE_SERVICE_ROLE_KEY or enable DELETE on registrations for parents in RLS.',
       }
     }
+    await sendNlsfTransactionReceiptEmail({
+      logContext: 'removePendingCampRegistration',
+      subjectParentName: parentDisplayForReceipt,
+      subjectActionType: 'CANCELED_CAMP_WEEK',
+      lines: [
+        {
+          parentDisplayName: parentDisplayForReceipt,
+          childDisplayName: childDisplayForReceipt,
+          actionLabel: 'Canceled',
+          campWeekTail: nlsfCampWeekDetailPhrase(weekRemoved),
+        },
+      ],
+    })
     return { success: true }
   }
 }
@@ -1150,17 +1185,22 @@ export async function submitAdditionalWeeks(input: {
         amountDollars: `$${(newAmountCents / 100).toLocaleString('en-US')}`,
         weekCount: addedWeekCount,
       })
-      const receiptSubject = `[NLSF receipt] Additional weeks · ${parentName} · ${addedWeekCount} week(s) · $${(newAmountCents / 100).toLocaleString('en-US')}`
-      const { error: receiptErr } = await resend.emails.send({
-        from: SENDER_EMAIL,
-        replyTo: REPLY_TO_EMAIL,
-        to: REGISTRATION_RECEIPT_EMAIL,
-        subject: receiptSubject,
-        html: receiptHtml,
+      const txLines = resolved.flatMap((r) => {
+        const childName = `${r.child.player_first_name ?? ''} ${r.child.player_last_name ?? ''}`.trim()
+        return r.newWeeks.map((w) => ({
+          parentDisplayName: parentName || 'Parent',
+          childDisplayName: childName || 'Child',
+          actionLabel: 'Added',
+          campWeekTail: nlsfCampWeekDetailPhrase(w),
+        }))
       })
-      if (receiptErr) {
-        console.error('submitAdditionalWeeks ops receipt Resend:', receiptErr)
-      }
+      await sendNlsfTransactionReceiptEmail({
+        logContext: 'submitAdditionalWeeks',
+        subjectParentName: parentName || 'Parent',
+        subjectActionType: 'ADDED_CAMP_WEEKS',
+        lines: txLines,
+        htmlAppendix: `<hr style="border:none;border-top:1px solid #e2e8f0;margin:1rem 0;" />${receiptHtml}`,
+      })
     }
 
     if (parentEmail) {

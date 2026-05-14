@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js'
+import { getSiteOrigin } from '@/lib/site-origin'
 
 /** Service-role client for Auth Admin API (list users, etc.). Not cookie-based. */
 export function createAuthAdminClient() {
@@ -35,4 +36,46 @@ export async function lookupAuthUserIdByEmail(email: string): Promise<string | n
     return null
   }
   return null
+}
+
+/**
+ * Resolve or create a parent Auth user for staff manual registration.
+ * If no user exists, sends Supabase invite email (verify + set password) and returns the new id.
+ */
+export async function ensureParentAuthUserForManualRegistration(
+  email: string,
+): Promise<{ ok: true; userId: string; invited: boolean } | { ok: false; message: string }> {
+  const normalized = email.trim().toLowerCase()
+  if (!normalized) return { ok: false, message: 'Parent email is required.' }
+
+  const existing = await lookupAuthUserIdByEmail(normalized)
+  if (existing) return { ok: true, userId: existing, invited: false }
+
+  try {
+    const admin = createAuthAdminClient()
+    const origin = getSiteOrigin()
+    const redirectTo = `${origin}/auth/callback?next=${encodeURIComponent('/dashboard')}`
+    const { data, error } = await admin.auth.admin.inviteUserByEmail(normalized, {
+      data: { invited_via: 'staff_manual_registration' },
+      redirectTo,
+    })
+    if (error) {
+      console.error('[ensureParentAuthUserForManualRegistration] inviteUserByEmail:', error)
+      return {
+        ok: false,
+        message:
+          error.message ||
+          'Could not invite this email. Check Supabase Auth (signups / SMTP) and try again.',
+      }
+    }
+    const userId = data.user?.id
+    if (!userId) {
+      return { ok: false, message: 'Invite did not return a user id.' }
+    }
+    return { ok: true, userId, invited: true }
+  } catch (e) {
+    console.error('[ensureParentAuthUserForManualRegistration]', e)
+    const msg = e instanceof Error ? e.message : String(e)
+    return { ok: false, message: msg }
+  }
 }
